@@ -117,11 +117,12 @@ export default async function Footer() {
 
           {/* ── Brand column ── */}
           <div className="flex flex-col gap-6">
-            <LocalizedClientLink
-              href="/"
-              className="txt-compact-xlarge-plus uppercase hover:text-ui-fg-base self-start"
-            >
-              {brand.storeName}
+            <LocalizedClientLink href="/" className="self-start">
+              <img
+                src={brand.logoPath}
+                alt={brand.storeName}
+                className="h-12 w-auto"
+              />
             </LocalizedClientLink>
 
             <p className="text-sm text-ui-fg-subtle leading-relaxed max-w-xs">

@@ -42,10 +42,14 @@ export default async function Nav() {
             {/* Brand name: desktop — stays left-aligned */}
             <LocalizedClientLink
               href="/"
-              className="hidden lg:block txt-compact-xlarge-plus hover:text-ui-fg-base uppercase"
+              className="hidden lg:block"
               data-testid="nav-store-link"
             >
-              {brand.storeName}
+              <img
+                src={brand.logoPath}
+                alt={brand.storeName}
+                className="h-10 w-auto"
+              />
             </LocalizedClientLink>
           </div>
 
@@ -53,10 +57,14 @@ export default async function Nav() {
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none lg:hidden">
             <LocalizedClientLink
               href="/"
-              className="txt-compact-xlarge-plus hover:text-ui-fg-base uppercase pointer-events-auto"
+              className="pointer-events-auto"
               data-testid="nav-store-link-mobile"
             >
-              {brand.storeName}
+              <img
+                src={brand.logoPath}
+                alt={brand.storeName}
+                className="h-10 w-auto"
+              />
             </LocalizedClientLink>
           </div>
 
