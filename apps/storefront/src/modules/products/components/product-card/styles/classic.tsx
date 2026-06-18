@@ -72,7 +72,7 @@ const ClassicCard = ({
             <span
               className={
                 cheapestPrice.price_type === "sale"
-                  ? "text-sm font-semibold text-orange-500"
+                  ? "text-sm font-semibold text-[#b88a00]"
                   : "text-sm font-semibold text-ui-fg-base"
               }
             >

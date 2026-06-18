@@ -24,16 +24,17 @@ export type Brand = {
   /** Set any social URL to "" to hide that icon in the footer */
   social: {
     facebook: string
-    twitter: string
     instagram: string
+    tiktok: string
+    youtube: string
   }
 }
 
 const brand: Brand = {
-  storeName: "My Store",
-  tagline: "Quality products, delivered fast.",
+  storeName: "BUNO HOME DECOR",
+  tagline: "Quality Crafted Wooden products, delivered fast.",
   description:
-    "Your go-to destination for quality products at great prices, delivered fast to your door.",
+    "Your go-to destination for quality home decoration items at great prices, delivered fast with care to your door.",
 
   // Place logo at /public/images/logo.svg and favicon at /public/favicon.ico
   logoPath: "/images/logo.svg",
@@ -53,16 +54,17 @@ const brand: Brand = {
   },
 
   contact: {
-    address: "123 Main Street, New York, NY 10001",
-    phone: "+1 (555) 123-4567",
-    email: "hello@mystore.com",
-    whatsapp: "", // e.g. "+15551234567" — admin DB value takes precedence at runtime
+    address: "Banktown, Savar, Dhaka 1340, Bangladesh",
+    phone: "+8801712345678",
+    email: "bunohomedecor@gmail.com",
+    whatsapp: "+8801349498525", // e.g. "+15551234567" — admin DB value takes precedence at runtime
   },
 
   social: {
-    facebook: "", // e.g. "https://facebook.com/mystore"
-    twitter: "",  // e.g. "https://twitter.com/mystore"
-    instagram: "", // e.g. "https://instagram.com/mystore"
+    facebook: "https://facebook.com/bunohomedecor", // e.g. "https://facebook.com/mystore"
+    instagram: "https://instagram.com/bunohomedecor", // e.g. "https://instagram.com/mystore"
+    tiktok: "https://tiktok.com/@bunohomedecor", // e.g. "https://tiktok.com/@mystore"
+    youtube: "https://youtube.com/@bunohomedecor", // e.g. "https://youtube.com/@mystore"
   },
 }
 

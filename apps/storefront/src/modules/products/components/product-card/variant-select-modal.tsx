@@ -112,7 +112,7 @@ export default function VariantSelectModal({
                         className={[
                           "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all duration-150",
                           isSelected
-                            ? "border-orange-500 bg-orange-500 text-white"
+                            ? "border-[#fcbc06] bg-[#fcbc06] text-gray-900"
                             : "border-gray-200 bg-white text-gray-700 hover:border-gray-400",
                         ].join(" ")}
                       >

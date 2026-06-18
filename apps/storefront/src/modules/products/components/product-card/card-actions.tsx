@@ -102,7 +102,7 @@ export default function CardActions({
           <button
             onClick={handleBuyNow}
             disabled={adding || buyingNow}
-            className={`${btnBase} bg-orange-500 text-white hover:bg-orange-600`}
+            className={`${btnBase} bg-[#fcbc06] text-gray-900 hover:bg-[#e0a800]`}
           >
             {buyingNow ? (
               <span className="animate-pulse">Processing…</span>

@@ -28,10 +28,14 @@ export default function BottomMobileNav({ totalItems, countryCode }: Props) {
         <span className={labelCls}>HOME</span>
       </LocalizedClientLink>
 
-      <LocalizedClientLink href="/store" className={btnCls} aria-label="Categories">
+      <button
+        className={btnCls}
+        aria-label="Categories"
+        onClick={() => document.dispatchEvent(new CustomEvent("mobile-menu-open"))}
+      >
         <Tag className="w-5 h-5" />
         <span className={labelCls}>CATEGORIES</span>
-      </LocalizedClientLink>
+      </button>
 
       <button className={clx(btnCls, "relative")} onClick={openCart} aria-label="Cart">
         <span className="relative">

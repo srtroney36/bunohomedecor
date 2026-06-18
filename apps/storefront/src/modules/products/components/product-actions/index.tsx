@@ -190,7 +190,7 @@ export default function ProductActions({
             onClick={handleAddToCart}
             disabled={isActionDisabled || isAdding || isBuyingNow}
             data-testid="add-product-button"
-            className="flex items-center justify-center gap-x-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all duration-150 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            className="flex items-center justify-center gap-x-2 rounded-xl px-4 py-3 text-sm font-semibold text-gray-900 transition-all duration-150 bg-[#fcbc06] hover:bg-[#e0a800] disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {isAdding ? (
               <span className="animate-pulse">Adding…</span>

@@ -38,7 +38,7 @@ const CompactCard = ({ product, cheapestPrice, fields }: CompactCardProps) => {
             <span
               className={
                 cheapestPrice.price_type === "sale"
-                  ? "text-xs font-semibold text-orange-500"
+                  ? "text-xs font-semibold text-[#b88a00]"
                   : "text-xs font-semibold text-ui-fg-base"
               }
             >

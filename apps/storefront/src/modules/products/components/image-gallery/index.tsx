@@ -27,7 +27,7 @@ const ImageGallery = ({ images }: ImageGalleryProps) => {
               onClick={() => setActiveIndex(i)}
               className={`relative aspect-square w-full overflow-hidden rounded-lg border-2 transition-all duration-200 flex-shrink-0 ${
                 i === activeIndex
-                  ? "border-orange-400 shadow-sm"
+                  ? "border-[#fcbc06] shadow-sm"
                   : "border-transparent hover:border-gray-300"
               }`}
             >
