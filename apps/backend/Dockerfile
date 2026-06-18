@@ -11,4 +11,4 @@ RUN NODE_OPTIONS=--max-old-space-size=3072 npm run build
 
 EXPOSE 9000
 
-CMD ["sh", "-c", "./node_modules/.bin/medusa db:migrate && npm run start"]
+CMD ["sh", "-c", "cd /app/.medusa/server && /app/node_modules/.bin/medusa db:migrate && cd /app && npm run start"]
