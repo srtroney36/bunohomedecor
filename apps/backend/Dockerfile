@@ -20,4 +20,4 @@ ENV NODE_ENV=production
 EXPOSE 9000
 
 # Run migrate + start from inside .medusa/server (cwd matters — this is what was missing)
-CMD ["sh", "-c", "npx medusa db:migrate && npm run start"]
+CMD ["npm", "run", "start"]
