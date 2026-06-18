@@ -1,10 +1,11 @@
 import { Metadata } from "next"
+import brand from "brand.config"
 import { getHomepageSections } from "@lib/data/homepage"
 import { SECTION_REGISTRY } from "@modules/home/section-registry"
 
 export const metadata: Metadata = {
-  title: "My Store",
-  description: "Welcome to our store.",
+  title: brand.storeName,
+  description: brand.tagline,
 }
 
 // Next.js ISR: page re-renders at most every 60 s when a request comes in
