@@ -1,4 +1,4 @@
-# Part 4 — Feature Configuration Guide
+# Part 3 — Feature Configuration Guide
 
 Every feature in this template is **optional and off by default**. A store with only
 the required env vars is a working cash-on-delivery storefront. Enable features one at
@@ -13,7 +13,7 @@ Two kinds of configuration:
 | Kind | Where stored | Who can see the plaintext | Rotation |
 |------|-------------|--------------------------|---------|
 | **Admin-encrypted** | Database (AES-256-GCM ciphertext) | Backend at send/use time only; admin shows masked hint | Re-enter in admin form |
-| **Env var** | Coolify dashboard → env vars | Whoever has Coolify access | Change in Coolify → redeploy |
+| **Env var** | Your hosting platform's environment variables | Whoever has platform access | Change the env var → redeploy |
 
 **Admin-encrypted features** (credentials entered in the admin dashboard, never in `.env`):
 - Email (Resend) — API key, from-email, from-name
@@ -22,7 +22,7 @@ Two kinds of configuration:
 - Tracking → Conversions API token
 - Authentication → Google OAuth client secret
 
-**Env-var features** (set in Coolify, require redeploy to change):
+**Env-var features** (set in your platform's environment variables, require redeploy to change):
 - Payment providers (Stripe, SSLCommerz, bKash)
 - `APP_SECRETS_ENCRYPTION_KEY` (master key for all admin-encrypted secrets)
 - Analytics pixels on storefront (GTM, TikTok, Google Ads)
@@ -115,7 +115,7 @@ password-reset emails via [Resend](https://resend.com).
    - **From Email**: e.g. `orders@acmeshop.com` (must be on your verified domain)
    - **From Name**: e.g. `Acme Shop`
    - Click **Save Email Credentials**
-6. Backend `.env` (Coolify): set `STORE_URL=https://shop.acmeshop.com` — used inside
+6. Backend env var: set `STORE_URL=https://shop.acmeshop.com` — used inside
    email templates for logo images and account links
 7. Use the **Send test email** button in Admin → Notifications to verify delivery
 
@@ -173,7 +173,7 @@ messages to customers.
 
 ---
 
-## Payments — Stripe (Env vars → Coolify)
+## Payments — Stripe (Environment variables)
 
 **What it enables:** International card payments, Apple Pay, Google Pay via Stripe.
 
@@ -202,7 +202,7 @@ NEXT_PUBLIC_STRIPE_KEY=pk_live_...  # or pk_test_...
 
 ---
 
-## Payments — SSLCommerz (Env vars → Coolify)
+## Payments — SSLCommerz (Environment variables)
 
 **What it enables:** Bangladesh payment aggregator supporting cards, bKash, Nagad,
 Rocket, EMI, and internet banking — all through one integration.
@@ -228,7 +228,7 @@ both from your SSLCommerz merchant portal.
 
 ---
 
-## Payments — bKash Direct (Env vars → Coolify)
+## Payments — bKash Direct (Environment variables)
 
 **What it enables:** Direct bKash tokenized checkout (PGW) — useful when you need
 bKash-only without the full SSLCommerz aggregator.
@@ -378,7 +378,7 @@ entries. Remove the Test Event Code before going live.
 NEXT_PUBLIC_GTM_ID=GTM-XXXXXXX
 ```
 
-Set in the storefront's Coolify env vars. Fires a `PageView` dataLayer push on every
+Set in the storefront's environment variables. Fires a `PageView` dataLayer push on every
 navigation. Use GTM to manage all other tags from the GTM dashboard without redeploying.
 
 ### TikTok Pixel / Google Ads (storefront env vars)
@@ -464,8 +464,8 @@ not configured.
 
 Every feature in the admin that requires external credentials has a built-in
 collapsible **Setup Guide** panel with step-by-step instructions, links, and which env
-vars (if any) still need to be set in Coolify. The guides are the canonical reference;
-this document is the overview.
+vars (if any) still need to be set on your hosting platform. The guides are the canonical
+reference; this document is the overview.
 
 ---
 
@@ -480,9 +480,9 @@ this document is the overview.
 | Brands | Admin | No | — |
 | Email (Resend) | Admin → Notifications | Yes (API key) | `STORE_URL`, `APP_SECRETS_ENCRYPTION_KEY` |
 | SMS | Admin → Notifications | Yes (API key, auth token) | `APP_SECRETS_ENCRYPTION_KEY` |
-| Stripe | Coolify env vars | No | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_KEY` |
-| SSLCommerz | Coolify env vars | No | `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD`, `BACKEND_URL` |
-| bKash direct | Coolify env vars | No | `BKASH_*` × 4, `BACKEND_URL` |
+| Stripe | Backend env vars | No | `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_KEY` |
+| SSLCommerz | Backend env vars | No | `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD`, `BACKEND_URL` |
+| bKash direct | Backend env vars | No | `BKASH_*` × 4, `BACKEND_URL` |
 | Couriers | Admin → Couriers | Yes (all creds) | `APP_SECRETS_ENCRYPTION_KEY` |
 | Meta Pixel | Admin → Tracking | No | — |
 | GA4 | Admin → Tracking | No | — |

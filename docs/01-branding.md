@@ -18,7 +18,7 @@ it later requires a redeploy of the storefront.
 > `brand.config.ts` controls the visual identity baked into the build (colors, fonts,
 > store name, logo). Product listings, homepage sections, product-card style, and
 > WhatsApp/order phone runtime overrides are managed later in the admin dashboard —
-> see [Part 4 – Feature Configuration](./03-configuration.md).
+> see [Part 3 – Feature Configuration](./03-configuration.md).
 
 ---
 

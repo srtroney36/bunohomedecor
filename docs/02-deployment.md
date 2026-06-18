@@ -49,7 +49,7 @@ must be re-entered.** Store it somewhere safe from day one.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Coolify VPS                                        │
+│  Your server (any Docker host)                      │
 │                                                     │
 │  ┌──────────────────┐     ┌──────────────────────┐  │
 │  │  Next.js         │────▶│  Medusa Backend      │  │
@@ -59,18 +59,26 @@ must be re-entered.** Store it somewhere safe from day one.
 │                                      │              │
 │                           ┌──────────▼───────────┐  │
 │                           │  PostgreSQL           │  │
-│                           │  (Coolify managed)   │  │
 │                           └──────────────────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
 **One store = one deployment:**
-- 1 PostgreSQL database resource
+- 1 PostgreSQL database
 - 1 Medusa backend app (serves the API and the admin UI at `/app`)
 - 1 Next.js storefront app
+- 1 S3-compatible bucket for uploads (any provider — see Section 4d)
 
-Each store is a **separate deployment** of this template on the same or a different
-Coolify VPS. Stores do not share databases or backends.
+Each store is a **separate deployment** of this template. Stores do not share databases
+or backends.
+
+> **Deployment platform.** Both apps are standard **Dockerized** services (each ships a
+> `Dockerfile`), so they run on any host that can build/run Docker images: a managed PaaS
+> (Coolify, Dokploy, Railway, Render, Fly.io), or a plain VPS with Docker Compose. The
+> step-by-step below uses **Coolify** as the worked example because it bundles Postgres and
+> TLS, but the only things any platform needs are: build the Dockerfile, expose the port,
+> set the env vars, and point a domain at it. Section 7 (migrations, first-run) is
+> platform-independent.
 
 Redis is **optional** — the backend uses an in-memory fallback automatically when
 `REDIS_URL` is not set. For most small-to-medium single-instance stores the in-memory
@@ -84,16 +92,20 @@ horizontally or if you need event durability across deployments.
 
 | Requirement | Notes |
 |-------------|-------|
-| Git host | GitHub, GitLab, or Gitea — Coolify can pull from any of these |
-| Coolify VPS | 2 vCPU / 4 GB RAM minimum recommended; Ubuntu 22.04 LTS |
+| Git host | GitHub, GitLab, or Gitea — most deploy platforms can pull from any of these |
+| A Docker host | Any server/PaaS that builds and runs Docker images (Coolify, Dokploy, Railway, Render, Fly.io, or a VPS with Docker Compose). 2 vCPU / 4 GB RAM minimum recommended |
+| PostgreSQL 15+ | Managed by your platform, or a separate managed/self-hosted instance |
+| S3-compatible storage | Any provider (AWS S3, Cloudflare R2, Backblaze B2, MinIO, Garage…) — Section 4d |
 | Domain + DNS | Two subdomains per store: e.g. `api.acmeshop.com` (backend) and `shop.acmeshop.com` (storefront) |
 | Node.js ≥ 20 | **Required locally.** Backend `package.json` requires `"node": ">=20"`. You run database migrations from your local machine (see Section 7a) and may build locally. |
 | `ssh` client | Required to tunnel to the managed Postgres for migrations (Section 7a). Built into Windows/macOS/Linux. |
 
-> **Builds use the committed Dockerfiles, not Nixpacks.** This template ships
-> `apps/backend/Dockerfile` and `apps/storefront/Dockerfile`. In Coolify you must set each
-> app's **Build Pack = Dockerfile** (Nixpacks is unreliable for this stack — it intermittently
-> fails the nix setup and corrupts the Next.js build cache). See Section 4b/4c.
+> **Builds use the committed Dockerfiles.** This template ships
+> `apps/backend/Dockerfile` and `apps/storefront/Dockerfile` — these define the entire build.
+> Configure your platform to build **from the Dockerfile**, not an auto-detected buildpack.
+> (On Coolify specifically, set **Build Pack = Dockerfile** — its default Nixpacks builder is
+> unreliable for this stack: it intermittently fails the nix setup and corrupts the Next.js
+> build cache.) See Section 4b/4c.
 
 > **You need a local Node setup.** Database migrations are run **from your local machine**
 > against the server's database, because `medusa db:migrate` hangs when run inside the
@@ -137,9 +149,12 @@ Apply branding (Part 1) on the new repo before the first deploy.
 
 ---
 
-## 4. Coolify setup
+## 4. Deploy the apps
 
-For each store, create **3 resources** in Coolify in this order:
+For each store you need **three things**, in this order: a PostgreSQL database, the backend
+app, and the storefront app — plus an S3-compatible bucket for uploads. The steps below show
+the **Coolify** workflow as a concrete example; on another platform the equivalent is "create
+a Postgres, deploy each Dockerfile, set its env vars and domain."
 
 ### 4a. PostgreSQL database
 
@@ -356,10 +371,11 @@ Add them only when you are ready to enable that feature.
 
 ## 6. Env vars behavior note
 
-> All environment variables are managed in the **Coolify dashboard** — never edit
-> `.env` files in the deployed container. After changing any env var in Coolify,
-> trigger a **Redeploy** (backend) or **Restart** (storefront) for the change to take
-> effect.
+> All environment variables are managed in **your hosting platform's dashboard** (Coolify,
+> Railway, etc.) — never edit `.env` files in the deployed container. After changing any env
+> var, trigger a **Redeploy** of the affected app for the change to take effect. (Changing a
+> `NEXT_PUBLIC_*` storefront var requires a full rebuild, since those are baked in at build
+> time.)
 >
 > Every feature protected by an env var degrades gracefully when the var is absent:
 > payment providers don't appear at checkout, notification providers skip sends with a

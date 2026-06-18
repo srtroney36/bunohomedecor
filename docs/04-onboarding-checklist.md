@@ -1,4 +1,4 @@
-# Part 5 — Store Onboarding Checklist
+# Part 4 — Store Onboarding Checklist
 
 Use this checklist when handing a finished store to a client. It covers everything
 from your deploy work to what the client sets up themselves in the admin.
@@ -16,16 +16,17 @@ from your deploy work to what the client sets up themselves in the admin.
 [ ] Changes committed and pushed to the store's Git repository
 ```
 
-### Coolify deploy
+### Deploy (Dockerfile build — Coolify shown; any Docker host works)
 ```
-[ ] PostgreSQL resource created and running in Coolify
-[ ] MinIO resource created in Coolify:
+[ ] PostgreSQL 15+ created and running
+[ ] S3-compatible bucket ready (R2 / B2 / MinIO / Garage / AWS S3 — any provider):
     [ ] Bucket created (e.g. medusa-store)
-    [ ] Bucket anonymous access set to public (via MinIO Console)
-    [ ] Endpoint, Access Key, Secret Key noted
-[ ] Backend app created — build: npm run build, start: npm run start, port: 9000
-[ ] Backend REQUIRED env vars set in Coolify:
-    [ ] DATABASE_URL (from Coolify PostgreSQL resource)
+    [ ] Public read access enabled (provider-specific)
+    [ ] Endpoint, Access Key, Secret Key, public URL noted
+[ ] Backend app created — Build Pack: Dockerfile, Base Dir: apps/backend, Port: 9000
+    [ ] Build timeout raised (3600) ; deploy one app at a time (avoid OOM)
+[ ] Backend REQUIRED env vars set (RUNTIME — not build-time-only):
+    [ ] DATABASE_URL (internal Postgres URL, not localhost)
     [ ] JWT_SECRET (openssl rand -hex 32)
     [ ] COOKIE_SECRET (openssl rand -hex 32)
     [ ] STORE_CORS = https://shop.acmeshop.com
@@ -33,36 +34,39 @@ from your deploy work to what the client sets up themselves in the admin.
     [ ] AUTH_CORS = https://api.acmeshop.com,https://shop.acmeshop.com
     [ ] APP_SECRETS_ENCRYPTION_KEY (openssl rand -hex 32 — BACKED UP in password manager)
     [ ] MEDUSA_ADMIN_ONBOARDING_TYPE = nextjs
-[ ] MinIO env vars set on backend:
-    [ ] S3_ENDPOINT = https://minio-xxxx.coolify.io
+[ ] S3 env vars set on backend (all six together):
+    [ ] S3_ENDPOINT   (provider API endpoint)
     [ ] S3_BUCKET = medusa-store
-    [ ] S3_ACCESS_KEY_ID = (from Coolify MinIO resource)
-    [ ] S3_SECRET_ACCESS_KEY = (from Coolify MinIO resource)
-    [ ] S3_REGION = us-east-1
-    [ ] S3_FILE_URL = https://minio-xxxx.coolify.io/medusa-store
+    [ ] S3_ACCESS_KEY_ID
+    [ ] S3_SECRET_ACCESS_KEY
+    [ ] S3_REGION     (R2: auto / AWS: real region / others: any string)
+    [ ] S3_FILE_URL   (public bucket URL)
 [ ] Backend deployed and healthy (curl https://api.acmeshop.com/health → {"status":"ok"})
 ```
 
 ### Database & first-run
 ```
-[ ] npx medusa db:migrate  — ran in Coolify terminal
-[ ] npx medusa db:sync-links  — ran in Coolify terminal
-[ ] Admin user created: npx medusa user -e admin@... -p ...
-[ ] Admin login verified at https://api.acmeshop.com/app
+[ ] Migrations run FROM LOCAL over an SSH tunnel — NOT in the container (it hangs):
+    Terminal A:  ssh -L 15432:<pg-ip>:5432 <user>@<vps>
+    Terminal B:  cd apps/backend
+                 DATABASE_URL=postgres://USER:PASS@127.0.0.1:15432/DBNAME npx medusa db:migrate
+    (see docs/02-deployment.md §7a — this is the verified working method)
+[ ] Admin user created: docker exec -it <backend-id> sh -c "cd /app/.medusa/server && npx medusa user -e admin@... -p ..."
+[ ] Admin login verified at https://api.acmeshop.com/app  (hard-refresh if cached)
 ```
 
 ### Storefront
 ```
 [ ] Admin → Settings → API Keys → publishable key created → key starts with pk_...
-[ ] Storefront app created in Coolify — build: npm run build, start: npm run start, port: 8000
-[ ] Storefront REQUIRED env vars set:
+[ ] Storefront app created — Build Pack: Dockerfile, Base Dir: apps/storefront, Port: 8000
+[ ] Storefront REQUIRED env vars set (NEXT_PUBLIC_* are baked in at build time):
     [ ] NEXT_PUBLIC_MEDUSA_BACKEND_URL = https://api.acmeshop.com
     [ ] NEXT_PUBLIC_MEDUSA_PUBLISHABLE_KEY = pk_...
     [ ] NEXT_PUBLIC_DEFAULT_REGION = (e.g. us or bd)
     [ ] NEXT_PUBLIC_BASE_URL = https://shop.acmeshop.com
 [ ] Storefront deployed and loading
+[ ] Admin → Settings → Store → currency enabled (e.g. BDT) BEFORE creating the region
 [ ] Admin → Settings → Regions → region created matching NEXT_PUBLIC_DEFAULT_REGION
-[ ] Admin → Settings → Regions → currency set correctly
 [ ] Storefront shows store name, logo, and correct branding
 [ ] COD (Pay on Delivery) available at checkout — no config needed
 ```
@@ -101,9 +105,9 @@ enter themselves) the credentials.
 |--------------|--------|-------|
 | Store name, colors, fonts, logo | **You** | brand.config.ts + public/ assets (before deploy) |
 | Footer static links | **You** | footer/index.tsx (before deploy) |
-| Encryption key | **You** | Coolify env var (at deploy) |
-| Database, CORS, JWT/cookie secrets | **You** | Coolify env vars (at deploy) |
-| Payment env vars (Stripe/SSLCommerz/bKash) | **You** (client provides credentials) | Coolify env vars (any time, requires redeploy) |
+| Encryption key | **You** | Backend env var (at deploy) |
+| Database, CORS, JWT/cookie secrets | **You** | Backend env vars (at deploy) |
+| Payment env vars (Stripe/SSLCommerz/bKash) | **You** (client provides credentials) | Backend env vars (any time, requires redeploy) |
 | Email credentials (Resend) | **Client** (or you on their behalf) | Admin → Notifications → Credentials |
 | SMS credentials | **Client** (or you on their behalf) | Admin → Notifications → Credentials |
 | Courier credentials + activation | **Client** (or you on their behalf) | Admin → Couriers |
