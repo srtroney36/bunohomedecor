@@ -11,7 +11,7 @@ import CartButton from "@modules/layout/components/cart-button"
 import CategoryBar from "@modules/layout/components/category-bar"
 import SideMenu from "@modules/layout/components/side-menu"
 import SearchBar from "@modules/layout/components/search-bar"
-import brand from "brand.config"
+import BrandLogo from "@modules/common/components/brand-logo"
 
 export default async function Nav() {
   const [regions, locales, currentLocale, allCategories] = await Promise.all([
@@ -45,10 +45,9 @@ export default async function Nav() {
               className="hidden lg:block"
               data-testid="nav-store-link"
             >
-              <img
-                src={brand.logoPath}
-                alt={brand.storeName}
-                className="h-10 w-auto"
+              <BrandLogo
+                imgClassName="h-10 w-auto"
+                textClassName="txt-compact-xlarge-plus uppercase hover:text-ui-fg-base"
               />
             </LocalizedClientLink>
           </div>
@@ -60,10 +59,9 @@ export default async function Nav() {
               className="pointer-events-auto"
               data-testid="nav-store-link-mobile"
             >
-              <img
-                src={brand.logoPath}
-                alt={brand.storeName}
-                className="h-10 w-auto"
+              <BrandLogo
+                imgClassName="h-10 w-auto"
+                textClassName="txt-compact-xlarge-plus uppercase hover:text-ui-fg-base"
               />
             </LocalizedClientLink>
           </div>

@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(getBaseURL()),
   title: brand.storeName,
   description: brand.tagline,
+  icons: { icon: brand.faviconPath },
 }
 
 export default function RootLayout(props: { children: React.ReactNode }) {
