@@ -27,11 +27,13 @@ type Props = {
 function AccordionSection({
   title,
   children,
+  defaultExpanded = true,
 }: {
   title: string
   children: React.ReactNode
+  defaultExpanded?: boolean
 }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(defaultExpanded)
   return (
     <div className="border-b border-ui-border-base">
       <button
@@ -179,32 +181,6 @@ export default function FilterDrawer({
             ))}
           </AccordionSection>
 
-          {/* Brands */}
-          {brands.length > 0 && (
-            <AccordionSection title="Brands">
-              <button
-                className={optionCls(!selectedBrand)}
-                onClick={() => updateFilter("brand", null)}
-                style={!selectedBrand ? { color: "var(--brand-primary)" } : undefined}
-              >
-                All Brands
-              </button>
-              {brands.map((b) => (
-                <button
-                  key={b.id}
-                  className={optionCls(selectedBrand === b.handle)}
-                  onClick={() =>
-                    updateFilter("brand", selectedBrand === b.handle ? null : b.handle)
-                  }
-                  style={selectedBrand === b.handle ? { color: "var(--brand-primary)" } : undefined}
-                >
-                  {selectedBrand === b.handle && dot}
-                  {b.name}
-                </button>
-              ))}
-            </AccordionSection>
-          )}
-
           {/* Categories */}
           {categories.length > 0 && (
             <AccordionSection title="Categories">
@@ -226,6 +202,32 @@ export default function FilterDrawer({
                 >
                   {selectedCategory === c.handle && dot}
                   {c.name}
+                </button>
+              ))}
+            </AccordionSection>
+          )}
+
+          {/* Brands */}
+          {brands.length > 0 && (
+            <AccordionSection title="Brands" defaultExpanded={false}>
+              <button
+                className={optionCls(!selectedBrand)}
+                onClick={() => updateFilter("brand", null)}
+                style={!selectedBrand ? { color: "var(--brand-primary)" } : undefined}
+              >
+                All Brands
+              </button>
+              {brands.map((b) => (
+                <button
+                  key={b.id}
+                  className={optionCls(selectedBrand === b.handle)}
+                  onClick={() =>
+                    updateFilter("brand", selectedBrand === b.handle ? null : b.handle)
+                  }
+                  style={selectedBrand === b.handle ? { color: "var(--brand-primary)" } : undefined}
+                >
+                  {selectedBrand === b.handle && dot}
+                  {b.name}
                 </button>
               ))}
             </AccordionSection>

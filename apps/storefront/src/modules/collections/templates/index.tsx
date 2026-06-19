@@ -2,7 +2,7 @@ import { Suspense } from "react"
 
 import SkeletonProductGrid from "@modules/skeletons/templates/skeleton-product-grid"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
-import SortBar from "@modules/store/components/sort-bar"
+import FilterSortBar from "@modules/store/components/filter-sort-bar"
 import PaginatedProducts from "@modules/store/templates/paginated-products"
 import { buildGridClass, getStorefrontCardSettings } from "@lib/data/store-settings"
 import { HttpTypes } from "@medusajs/types"
@@ -28,7 +28,7 @@ export default async function CollectionTemplate({
       <div className="mb-2 text-2xl-semi">
         <h1>{collection.title}</h1>
       </div>
-      <SortBar sortBy={sort} />
+      <FilterSortBar sortBy={sort} brands={[]} categories={[]} collections={[]} />
       <Suspense
         fallback={<SkeletonProductGrid numberOfProducts={collection.products?.length} gridClass={gridClass} />}
       >

@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 
 import { listCategories } from "@lib/data/categories"
+import { listBrands } from "@lib/data/brands"
 import { listLocales } from "@lib/data/locales"
 import { getLocale } from "@lib/data/locale-actions"
 import { listRegions } from "@lib/data/regions"
@@ -14,15 +15,17 @@ import SearchBar from "@modules/layout/components/search-bar"
 import BrandLogo from "@modules/common/components/brand-logo"
 
 export default async function Nav() {
-  const [regions, locales, currentLocale, allCategories] = await Promise.all([
+  const [regions, locales, currentLocale, allCategories, brands] = await Promise.all([
     listRegions().then((regions: StoreRegion[]) => regions),
     listLocales(),
     getLocale(),
     listCategories(),
+    listBrands(),
   ])
 
   // Top-level only — same filter pattern the footer uses
   const topLevelCategories = allCategories.filter((c) => !c.parent_category)
+  const menuBrands = brands.map((b) => ({ id: b.id, name: b.name, handle: b.handle }))
 
   return (
     <div className="sticky top-0 inset-x-0 z-50 group">
@@ -37,6 +40,7 @@ export default async function Nav() {
                 locales={locales}
                 currentLocale={currentLocale}
                 categories={topLevelCategories}
+                brands={menuBrands}
               />
             </div>
             {/* Brand name: desktop — stays left-aligned */}
@@ -112,7 +116,9 @@ export default async function Nav() {
           </div>
         </nav>
       </header>
-      <CategoryBar categories={topLevelCategories} />
+      <div className="hidden lg:block">
+        <CategoryBar categories={topLevelCategories} />
+      </div>
     </div>
   )
 }

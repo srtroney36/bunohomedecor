@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { HttpTypes } from "@medusajs/types"
-import { ArrowRightMini, User, XMark } from "@medusajs/icons"
+import { ArrowRightMini, XMark } from "@medusajs/icons"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { clx } from "@modules/common/components/ui"
 import useToggleState from "@lib/hooks/use-toggle-state"
@@ -13,13 +13,18 @@ import { Locale } from "@lib/data/locales"
 import brand from "brand.config"
 
 type Category = HttpTypes.StoreProductCategory
+type Brand = { id: string; name: string; handle: string }
 
 type SideMenuProps = {
   regions: HttpTypes.StoreRegion[] | null
   locales: Locale[] | null
   currentLocale: string | null
   categories?: Category[] | null
+  brands?: Brand[] | null
 }
+
+const rowCls =
+  "flex items-center justify-between h-12 px-4 border-b border-ui-border-base text-sm font-medium text-ui-fg-base hover:bg-ui-bg-subtle transition-colors w-full text-left"
 
 // ─── Category accordion row ───────────────────────────────────────────────────
 
@@ -34,20 +39,15 @@ function CategoryRow({
   const children = (category.category_children ?? []) as Category[]
   const hasChildren = children.length > 0
 
-  const rowCls =
-    "flex items-center justify-between h-12 px-4 border-b border-ui-border-base text-sm font-medium text-ui-fg-base hover:bg-ui-bg-subtle transition-colors w-full text-left"
-
   if (!hasChildren) {
     return (
-      <>
-        <LocalizedClientLink
-          href={`/categories/${category.handle}`}
-          className={rowCls}
-          onClick={onClose}
-        >
-          {category.name}
-        </LocalizedClientLink>
-      </>
+      <LocalizedClientLink
+        href={`/categories/${category.handle}`}
+        className={rowCls}
+        onClick={onClose}
+      >
+        {category.name}
+      </LocalizedClientLink>
     )
   }
 
@@ -86,9 +86,55 @@ function CategoryRow({
   )
 }
 
+// ─── Brands accordion (collapsed by default) ──────────────────────────────────
+
+function BrandsSection({
+  brands,
+  onClose,
+}: {
+  brands: Brand[]
+  onClose: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <>
+      <button
+        className={rowCls}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((p) => !p)}
+      >
+        Brands
+        <ArrowRightMini
+          className={clx(
+            "text-ui-fg-muted flex-shrink-0 transition-transform duration-200",
+            expanded ? "rotate-90" : ""
+          )}
+        />
+      </button>
+
+      {expanded && (
+        <ul className="bg-ui-bg-subtle border-b border-ui-border-base">
+          {brands.map((b) => (
+            <li key={b.id}>
+              <LocalizedClientLink
+                href={`/brands/${b.handle}`}
+                className="flex items-center h-10 pl-8 pr-4 text-sm text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-base transition-colors border-b border-ui-border-base last:border-b-0"
+                onClick={onClose}
+              >
+                {b.name}
+              </LocalizedClientLink>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
 // ─── Side menu ────────────────────────────────────────────────────────────────
 
-const SideMenu = ({ regions, locales, currentLocale, categories }: SideMenuProps) => {
+const SideMenu = ({ regions, locales, currentLocale, categories, brands }: SideMenuProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const countryToggle = useToggleState()
@@ -118,8 +164,8 @@ const SideMenu = ({ regions, locales, currentLocale, categories }: SideMenuProps
     document.dispatchEvent(new CustomEvent('mobile-menu-close'))
   }
 
-  const rowCls =
-    "flex items-center justify-between h-12 px-4 border-b border-ui-border-base text-sm font-medium text-ui-fg-base hover:bg-ui-bg-subtle transition-colors"
+  const hasCategories = !!categories && categories.length > 0
+  const hasBrands = !!brands && brands.length > 0
 
   return (
     <>
@@ -168,78 +214,49 @@ const SideMenu = ({ regions, locales, currentLocale, categories }: SideMenuProps
               className="mobile-menu-drawer flex flex-col"
               data-testid="nav-menu-popup"
             >
-              {/* Account header banner */}
+              {/* Brand header banner */}
               <div
-                className="relative flex items-center gap-3 p-4 flex-shrink-0"
+                className="relative flex items-center justify-between p-4 flex-shrink-0"
                 style={{ backgroundColor: "var(--brand-primary)" }}
               >
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
-                  <User className="text-white w-5 h-5" />
-                </div>
-                <LocalizedClientLink
-                  href="/account"
-                  onClick={close}
-                  className="flex flex-col"
-                >
-                  <span className="text-sm font-semibold text-white leading-tight">
-                    Hello there!
-                  </span>
-                  <span className="text-xs text-white/80">Sign in</span>
-                </LocalizedClientLink>
-
-                {/* Close button */}
+                <span className="text-base font-semibold text-white">
+                  {brand.storeName}
+                </span>
                 <button
                   onClick={close}
                   aria-label="Close menu"
-                  className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
+                  className="w-7 h-7 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
                   data-testid="close-menu-button"
                 >
                   <XMark className="text-white w-4 h-4" />
                 </button>
               </div>
 
-              {/* Scrollable content */}
-              <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col">
-                {/* Main nav */}
-                <nav>
-                  <LocalizedClientLink href="/" className={rowCls} onClick={close}>
-                    Home
-                  </LocalizedClientLink>
-                  <LocalizedClientLink href="/store" className={rowCls} onClick={close}>
-                    Store
-                  </LocalizedClientLink>
-                </nav>
-
-                {/* Categories */}
-                {categories && categories.length > 0 && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest text-ui-fg-muted font-medium px-4 pt-4 pb-1">
-                      Categories
-                    </p>
-                    {categories.map((cat) => (
-                      <CategoryRow key={cat.id} category={cat} onClose={close} />
-                    ))}
-                  </div>
-                )}
-
-                {/* Quick links */}
-                <div>
+              {/* Fixed top: primary links + Categories label */}
+              <div className="flex-shrink-0">
+                <LocalizedClientLink href="/" className={rowCls} onClick={close}>
+                  Home
+                </LocalizedClientLink>
+                <LocalizedClientLink href="/store" className={rowCls} onClick={close}>
+                  Store
+                </LocalizedClientLink>
+                {hasCategories && (
                   <p className="text-xs uppercase tracking-widest text-ui-fg-muted font-medium px-4 pt-4 pb-1">
-                    Quick Links
+                    Categories
                   </p>
-                  <LocalizedClientLink href="/cart" className={rowCls} onClick={close}>
-                    Cart
-                  </LocalizedClientLink>
-                  <LocalizedClientLink href="/brands" className={rowCls} onClick={close}>
-                    Brands
-                  </LocalizedClientLink>
-                  <LocalizedClientLink href="/account" className={rowCls} onClick={close}>
-                    My Account
-                  </LocalizedClientLink>
-                </div>
+                )}
               </div>
 
-              {/* Footer: language / country + copyright */}
+              {/* Scrollable: category rows + Brands */}
+              <div className="flex-1 overflow-y-auto no-scrollbar">
+                {hasCategories &&
+                  categories!.map((cat) => (
+                    <CategoryRow key={cat.id} category={cat} onClose={close} />
+                  ))}
+                {hasBrands && <BrandsSection brands={brands!} onClose={close} />}
+              </div>
+
+              {/* Fixed footer: language / country (shipping) + copyright */}
               <div className="border-t border-ui-border-base px-4 py-4 flex-shrink-0 flex flex-col gap-3">
                 {!!locales?.length && (
                   <LanguageSelect

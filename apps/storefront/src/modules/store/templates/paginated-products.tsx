@@ -55,7 +55,8 @@ export default async function PaginatedProducts({
   }
 
   if (sortBy === "created_at") {
-    queryParams["order"] = "created_at"
+    // Newest first so "Latest" stays correct even beyond the first 100 fetched.
+    queryParams["order"] = "-created_at"
   }
 
   const region = await getRegion(countryCode)

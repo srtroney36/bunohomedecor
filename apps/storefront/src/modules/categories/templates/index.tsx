@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import InteractiveLink from "@modules/common/components/interactive-link"
 import SkeletonProductGrid from "@modules/skeletons/templates/skeleton-product-grid"
 import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
-import SortBar from "@modules/store/components/sort-bar"
+import FilterSortBar from "@modules/store/components/filter-sort-bar"
 import PaginatedProducts from "@modules/store/templates/paginated-products"
 import LocalizedClientLink from "@modules/common/components/localized-client-link"
 import { buildGridClass, getStorefrontCardSettings } from "@lib/data/store-settings"
@@ -78,7 +78,7 @@ export default async function CategoryTemplate({
         </div>
       )}
 
-      <SortBar sortBy={sort} />
+      <FilterSortBar sortBy={sort} brands={[]} categories={[]} collections={[]} />
 
       <Suspense
         fallback={<SkeletonProductGrid numberOfProducts={category.products?.length ?? 8} gridClass={gridClass} />}

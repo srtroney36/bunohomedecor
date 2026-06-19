@@ -34,6 +34,8 @@ export default function FilterSortBar({
   const [filterOpen, setFilterOpen] = useState(false)
 
   const activeCount = [selectedBrand, selectedCategory, selectedCollection].filter(Boolean).length
+  const hasFilters = brands.length > 0 || categories.length > 0 || collections.length > 0
+  const buttonLabel = hasFilters ? "Filters & Sort" : "Sort"
 
   return (
     <>
@@ -58,7 +60,8 @@ export default function FilterSortBar({
           data-active={activeCount > 0}
         >
           <Funnel className="w-4 h-4" />
-          Filters &amp; Sort{activeCount > 0 ? ` (${activeCount})` : ""}
+          {buttonLabel}
+          {activeCount > 0 ? ` (${activeCount})` : ""}
         </button>
       </div>
 
