@@ -4,10 +4,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useCallback, useState } from "react"
 import { XMark } from "@medusajs/icons"
 import { StoreBrand } from "@lib/data/brands"
+import { SortOptions } from "@modules/store/components/refinement-list/sort-products"
+
+const sortOptions: { value: SortOptions; label: string }[] = [
+  { value: "created_at", label: "Latest" },
+  { value: "price_asc", label: "Price: Low → High" },
+  { value: "price_desc", label: "Price: High → Low" },
+]
 
 type Props = {
   open: boolean
   onClose: () => void
+  sortBy: SortOptions
   brands: Pick<StoreBrand, "id" | "name" | "handle">[]
   categories: { id: string; name: string; handle: string }[]
   collections: { id: string; handle: string; title: string }[]
@@ -46,6 +54,7 @@ function AccordionSection({
 export default function FilterDrawer({
   open,
   onClose,
+  sortBy,
   brands,
   categories,
   collections,
@@ -57,15 +66,25 @@ export default function FilterDrawer({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
+  // Instant-apply: each selection updates the URL immediately. Filters are driven
+  // entirely by the URL, so a fresh load (no query params) has nothing pre-applied.
   const updateFilter = useCallback(
     (key: "brand" | "category" | "collection", value: string | null) => {
       const params = new URLSearchParams(searchParams)
-      if (value) {
-        params.set(key, value)
-      } else {
-        params.delete(key)
-      }
+      if (value) params.set(key, value)
+      else params.delete(key)
       params.delete("page")
+      router.push(`${pathname}?${params.toString()}`)
+    },
+    [pathname, router, searchParams]
+  )
+
+  const setSort = useCallback(
+    (value: SortOptions) => {
+      const params = new URLSearchParams(searchParams)
+      // Keep the URL clean — "Latest" is the default, so it needs no param.
+      if (value && value !== "created_at") params.set("sortBy", value)
+      else params.delete("sortBy")
       router.push(`${pathname}?${params.toString()}`)
     },
     [pathname, router, searchParams]
@@ -78,18 +97,21 @@ export default function FilterDrawer({
     params.delete("collection")
     params.delete("page")
     router.push(`${pathname}?${params.toString()}`)
-    onClose()
   }
 
   const activeCount = [selectedBrand, selectedCategory, selectedCollection].filter(Boolean).length
 
   const optionCls = (active: boolean) =>
     [
-      "flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm cursor-pointer transition-colors",
+      "flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm cursor-pointer transition-colors text-left w-full",
       active
         ? "font-semibold"
         : "text-ui-fg-subtle hover:text-ui-fg-base hover:bg-ui-bg-subtle",
     ].join(" ")
+
+  const dot = (
+    <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />
+  )
 
   return (
     <>
@@ -119,7 +141,7 @@ export default function FilterDrawer({
           style={{ backgroundColor: "var(--brand-primary)" }}
         >
           <span className="text-sm font-semibold text-white">
-            Filters{activeCount > 0 ? ` (${activeCount})` : ""}
+            Filters &amp; Sort{activeCount > 0 ? ` (${activeCount})` : ""}
           </span>
           <div className="flex items-center gap-2">
             {activeCount > 0 && (
@@ -142,6 +164,21 @@ export default function FilterDrawer({
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto no-scrollbar px-4 py-2">
+          {/* Sort */}
+          <AccordionSection title="Sort by">
+            {sortOptions.map((opt) => (
+              <button
+                key={opt.value}
+                className={optionCls(sortBy === opt.value)}
+                onClick={() => setSort(opt.value)}
+                style={sortBy === opt.value ? { color: "var(--brand-primary)" } : undefined}
+              >
+                {sortBy === opt.value && dot}
+                {opt.label}
+              </button>
+            ))}
+          </AccordionSection>
+
           {/* Brands */}
           {brands.length > 0 && (
             <AccordionSection title="Brands">
@@ -159,13 +196,9 @@ export default function FilterDrawer({
                   onClick={() =>
                     updateFilter("brand", selectedBrand === b.handle ? null : b.handle)
                   }
-                  style={
-                    selectedBrand === b.handle
-                      ? { color: "var(--brand-primary)" }
-                      : undefined
-                  }
+                  style={selectedBrand === b.handle ? { color: "var(--brand-primary)" } : undefined}
                 >
-                  {selectedBrand === b.handle && <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />}
+                  {selectedBrand === b.handle && dot}
                   {b.name}
                 </button>
               ))}
@@ -189,13 +222,9 @@ export default function FilterDrawer({
                   onClick={() =>
                     updateFilter("category", selectedCategory === c.handle ? null : c.handle)
                   }
-                  style={
-                    selectedCategory === c.handle
-                      ? { color: "var(--brand-primary)" }
-                      : undefined
-                  }
+                  style={selectedCategory === c.handle ? { color: "var(--brand-primary)" } : undefined}
                 >
-                  {selectedCategory === c.handle && <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />}
+                  {selectedCategory === c.handle && dot}
                   {c.name}
                 </button>
               ))}
@@ -217,18 +246,11 @@ export default function FilterDrawer({
                   key={c.id}
                   className={optionCls(selectedCollection === c.handle)}
                   onClick={() =>
-                    updateFilter(
-                      "collection",
-                      selectedCollection === c.handle ? null : c.handle
-                    )
+                    updateFilter("collection", selectedCollection === c.handle ? null : c.handle)
                   }
-                  style={
-                    selectedCollection === c.handle
-                      ? { color: "var(--brand-primary)" }
-                      : undefined
-                  }
+                  style={selectedCollection === c.handle ? { color: "var(--brand-primary)" } : undefined}
                 >
-                  {selectedCollection === c.handle && <span className="w-1.5 h-1.5 rounded-full bg-current flex-shrink-0" />}
+                  {selectedCollection === c.handle && dot}
                   {c.title}
                 </button>
               ))}
