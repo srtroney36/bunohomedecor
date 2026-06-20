@@ -88,6 +88,12 @@ module.exports = defineConfig({
       resolve: "@medusajs/medusa/fulfillment",
       options: {
         providers: [
+          // Default manual provider — required for simple flat-rate / Cash-on-Delivery
+          // shipping options. Without it, no shipping methods can be created.
+          {
+            resolve: "@medusajs/medusa/fulfillment-manual",
+            id: "manual",
+          },
           {
             resolve: "./src/modules/courierConfig/provider",
             id: "courier",

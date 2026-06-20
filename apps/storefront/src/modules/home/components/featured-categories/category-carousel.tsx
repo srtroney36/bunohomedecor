@@ -43,19 +43,17 @@ export function CategoryCarousel({ categories, countryCode }: Props) {
             className="flex-none w-28 snap-start group flex flex-col items-center gap-2"
           >
             {/* White card */}
-            <div className="w-24 h-24 rounded-2xl bg-white shadow-sm border border-gray-100 flex items-center justify-center overflow-hidden group-hover:shadow-md transition-shadow">
+            <div className="relative w-24 h-24 rounded-2xl bg-white shadow-sm border border-gray-100 overflow-hidden group-hover:shadow-md transition-shadow">
               {cat.thumbnail ? (
-                <div className="relative w-20 h-20">
-                  <Image
-                    src={cat.thumbnail}
-                    alt={cat.name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
+                <Image
+                  src={cat.thumbnail}
+                  alt={cat.name}
+                  fill
+                  className="object-cover"
+                />
               ) : (
                 <span
-                  className="text-2xl font-bold"
+                  className="absolute inset-0 flex items-center justify-center text-2xl font-bold"
                   style={{ color: "var(--brand-primary)" }}
                 >
                   {cat.name[0]}
