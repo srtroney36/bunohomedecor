@@ -7,6 +7,7 @@
   Label,
   RadioGroup,
   Select,
+  Switch,
   Text,
   toast,
   usePrompt,
@@ -454,6 +455,10 @@ function HeroMobileEditor({ section }: { section: HomeSection }) {
   const [aspect, setAspect] = useState<MobileAspect>(
     (cfg.mobile_aspect as MobileAspect) ?? "rectangle"
   )
+  const [overlayEnabled, setOverlayEnabled] = useState<boolean>(Boolean(cfg.overlay_enabled))
+  const [overlayOpacity, setOverlayOpacity] = useState<number>(
+    typeof cfg.overlay_opacity === "number" ? cfg.overlay_opacity : 40
+  )
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
@@ -461,9 +466,15 @@ function HeroMobileEditor({ section }: { section: HomeSection }) {
     try {
       await adminFetch(`/admin/homepage/sections/${section.id}`, {
         method: "POST",
-        body: JSON.stringify({ settings: { mobile_aspect: aspect } }),
+        body: JSON.stringify({
+          settings: {
+            mobile_aspect: aspect,
+            overlay_enabled: overlayEnabled,
+            overlay_opacity: overlayOpacity,
+          },
+        }),
       })
-      toast.success("Mobile appearance saved")
+      toast.success("Appearance saved")
     } catch {
       toast.error("Failed to save")
     } finally {
@@ -494,8 +505,36 @@ function HeroMobileEditor({ section }: { section: HomeSection }) {
           </label>
         ))}
       </RadioGroup>
+      <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Text size="small" weight="plus">Image overlay</Text>
+            <Text size="xsmall" className="text-ui-fg-subtle">
+              Darkens hero images so heading text stays readable.
+            </Text>
+          </div>
+          <Switch checked={overlayEnabled} onCheckedChange={setOverlayEnabled} />
+        </div>
+        {overlayEnabled && (
+          <div className="flex flex-col gap-y-1">
+            <div className="flex items-center justify-between">
+              <Label size="small">Overlay strength</Label>
+              <Text size="xsmall" className="text-ui-fg-subtle">{overlayOpacity}%</Text>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={overlayOpacity}
+              onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        )}
+      </div>
       <Button size="small" isLoading={saving} onClick={save}>
-        Save mobile shape
+        Save appearance
       </Button>
     </div>
   )

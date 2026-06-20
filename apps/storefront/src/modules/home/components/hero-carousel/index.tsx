@@ -16,6 +16,17 @@ function mobileAspectClass(aspect: string): string {
   return "aspect-[4/3]" // rectangle (default)
 }
 
+function HeroOverlay({ overlay }: { overlay?: { enabled: boolean; opacity: number } }) {
+  if (!overlay?.enabled) return null
+  const o = Math.max(0, Math.min(100, overlay.opacity ?? 0)) / 100
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{ backgroundColor: `rgba(0,0,0,${o})` }}
+    />
+  )
+}
+
 export function HeroCarousel({ section, variant }: Props) {
   const s = section as HeroCarouselSection
   const slides = s.slides ?? []
@@ -62,6 +73,7 @@ export function HeroCarousel({ section, variant }: Props) {
         setPaused={setPaused}
         title={s.title}
         mobileAspect={mobileAspect}
+        overlay={s.overlay}
       />
     )
   }
@@ -104,6 +116,7 @@ export function HeroCarousel({ section, variant }: Props) {
               className="w-full h-full object-cover"
             />
           </picture>
+          <HeroOverlay overlay={s.overlay} />
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 gap-3">
             {sl.heading && (
               <h2
@@ -185,6 +198,7 @@ interface SplitProps {
   setPaused: (p: boolean) => void
   title: string
   mobileAspect: string
+  overlay?: { enabled: boolean; opacity: number }
 }
 
 function HeroCarouselSplit({
@@ -197,6 +211,7 @@ function HeroCarouselSplit({
   setPaused,
   title,
   mobileAspect,
+  overlay,
 }: SplitProps) {
   const mAspect = mobileAspectClass(mobileAspect)
 
@@ -207,9 +222,9 @@ function HeroCarouselSplit({
       onMouseLeave={() => setPaused(false)}
     >
       {/* ═══ MOBILE: full-width carousel, no arrows, aspect-ratio based ═══ */}
-      <div className={`relative block sm:hidden overflow-hidden rounded-xl bg-gray-900 ${mAspect}`}>
+      <div className={`relative block sm:hidden overflow-hidden rounded-xl bg-[var(--brand-bg)] ${mAspect}`}>
         {slides.map((slide, i) => (
-          <SplitSlide key={slide.id} slide={slide} i={i} current={current} compact />
+          <SplitSlide key={slide.id} slide={slide} i={i} current={current} overlay={overlay} compact />
         ))}
         {slides.length > 1 && <SlideDots slides={slides} current={current} setCurrent={setCurrent} />}
         <h2 className="sr-only">{title}</h2>
@@ -221,9 +236,9 @@ function HeroCarouselSplit({
         style={{ height: "clamp(300px, 50vh, 560px)" }}
       >
         {/* Left: carousel */}
-        <div className="relative flex-[63] overflow-hidden rounded-xl bg-gray-900">
+        <div className="relative flex-[63] overflow-hidden rounded-xl bg-[var(--brand-bg)]">
           {slides.map((slide, i) => (
-            <SplitSlide key={slide.id} slide={slide} i={i} current={current} />
+            <SplitSlide key={slide.id} slide={slide} i={i} current={current} overlay={overlay} />
           ))}
 
           {slides.length > 1 && (
@@ -251,7 +266,7 @@ function HeroCarouselSplit({
 
         {/* Right: static promo panel */}
         {splitPanel?.image_url ? (
-          <div className="relative flex-[37] overflow-hidden rounded-xl bg-gray-900">
+          <div className="relative flex-[37] overflow-hidden rounded-xl bg-[var(--brand-bg)]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={splitPanel.image_url}
@@ -305,11 +320,13 @@ function SplitSlide({
   i,
   current,
   compact = false,
+  overlay,
 }: {
   slide: HeroSlide
   i: number
   current: number
   compact?: boolean
+  overlay?: { enabled: boolean; opacity: number }
 }) {
   return (
     <div
@@ -329,6 +346,7 @@ function SplitSlide({
           className="w-full h-full object-cover"
         />
       </picture>
+      <HeroOverlay overlay={overlay} />
       <div
         className={[
           "absolute inset-0 flex flex-col items-start justify-end gap-2",

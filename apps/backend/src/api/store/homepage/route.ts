@@ -243,6 +243,10 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
             ...base,
             slides,
             mobile_aspect: cfg.mobile_aspect ?? "rectangle",
+            overlay: {
+              enabled: Boolean(cfg.overlay_enabled),
+              opacity: typeof cfg.overlay_opacity === "number" ? cfg.overlay_opacity : 40,
+            },
           }
           if (section.layout === "split") {
             result.split_panel = {

@@ -52,6 +52,10 @@ export type HeroCarouselSettings = {
   split_cta_link?: string | null
   /** Mobile aspect ratio: square=1:1, rectangle=4:3 (default), wide=16:9 */
   mobile_aspect?: "square" | "rectangle" | "wide"
+  /** Dark overlay over hero images (improves text legibility) */
+  overlay_enabled?: boolean
+  /** Overlay strength, 0–100 (%) */
+  overlay_opacity?: number
 }
 
 export const PRODUCT_SHOWCASE_MOBILE_LAYOUTS = ["grid_2", "carousel", "strip"] as const

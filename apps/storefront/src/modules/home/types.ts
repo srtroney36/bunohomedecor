@@ -51,6 +51,8 @@ export interface HeroCarouselSection extends SectionBase {
   split_panel?: HeroSplitPanel
   /** Mobile aspect ratio — always set by the store route (default: "rectangle") */
   mobile_aspect: "square" | "rectangle" | "wide"
+  /** Optional dark overlay over hero images, configured in admin */
+  overlay?: { enabled: boolean; opacity: number }
 }
 
 export interface FeaturedCategoriesSection extends SectionBase {
