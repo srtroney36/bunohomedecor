@@ -32,6 +32,8 @@ interface SectionBase {
   title: string
   layout: string
   position: number
+  /** Which devices this section shows on. Defaults to "all". */
+  visibility: "all" | "desktop" | "mobile"
 }
 
 export interface HeroSplitPanel {

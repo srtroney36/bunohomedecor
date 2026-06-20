@@ -50,7 +50,7 @@ export const CARD_STYLES: CardStyleMeta[] = [
     key: "compact",
     label: "Compact",
     description: "Square image with tight spacing — great for dense grids",
-    supportedFields: ["name", "price", "model"],
+    supportedFields: ["name", "price", "compare_price", "model", "add_to_cart", "buy_now"],
   },
 ]
 

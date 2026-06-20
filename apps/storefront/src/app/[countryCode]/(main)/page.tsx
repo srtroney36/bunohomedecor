@@ -19,15 +19,15 @@ export default async function Home(props: {
 
   if (sections.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 gap-4">
-        <p
-          className="text-lg font-medium"
-          style={{ color: "var(--brand-secondary)" }}
+      <div className="flex flex-col items-center justify-center py-40 gap-3 text-center">
+        <h1
+          className="text-3xl font-semibold tracking-tight"
+          style={{ color: "var(--brand-primary)" }}
         >
-          No homepage sections configured yet.
-        </p>
-        <p className="text-sm" style={{ color: "var(--brand-secondary)" }}>
-          Add sections from the admin → Homepage panel.
+          Coming Soon
+        </h1>
+        <p className="text-sm max-w-md" style={{ color: "var(--brand-secondary)" }}>
+          We&apos;re putting the finishing touches on our store. Please check back shortly.
         </p>
       </div>
     )
@@ -43,8 +43,14 @@ export default async function Home(props: {
           index > 0 &&
           prev?.type !== "hero_carousel" &&
           section.type !== "hero_carousel"
+        const visClass =
+          section.visibility === "desktop"
+            ? "hidden lg:block"
+            : section.visibility === "mobile"
+            ? "lg:hidden"
+            : ""
         return (
-          <div key={section.id}>
+          <div key={section.id} className={visClass}>
             {showDivider && (
               <div className="relative flex items-center justify-center py-3 overflow-hidden content-container">
                 <div

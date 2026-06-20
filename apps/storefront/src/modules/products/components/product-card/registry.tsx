@@ -49,6 +49,6 @@ export const CARD_REGISTRY: Record<CardStyleKey, CardRegistryEntry> = {
   },
   compact: {
     component: CompactCard as CardStyleComponent,
-    supportedFields: ["name", "price", "model"],
+    supportedFields: ["name", "price", "compare_price", "model", "add_to_cart", "buy_now"],
   },
 }

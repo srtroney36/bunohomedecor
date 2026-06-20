@@ -307,12 +307,12 @@ const ProductCardsPage = () => {
       </Container>
 
       {/* Text Alignment â€” only shown for Minimal style */}
-      {style === "minimal" && (
+      {(style === "minimal" || style === "compact") && (
         <Container className="px-6 py-6 flex flex-col gap-y-5">
           <div>
             <Text size="small" weight="plus">Text Alignment</Text>
             <Text size="xsmall" className="text-ui-fg-muted mt-1">
-              Align product name and price on Minimal cards.
+              Align product name and price on Minimal and Compact cards.
             </Text>
           </div>
           <RadioGroup<CardTextAlign>

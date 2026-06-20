@@ -215,11 +215,12 @@ export async function GET(req: MedusaRequest, res: MedusaResponse) {
   const resolved = await Promise.all(
     sections.map(async (section: any) => {
       const base = {
-        id:       section.id,
-        type:     section.type,
-        layout:   section.layout,
-        title:    section.title,
-        position: section.position,
+        id:         section.id,
+        type:       section.type,
+        layout:     section.layout,
+        title:      section.title,
+        position:   section.position,
+        visibility: ((section.settings as any)?.visibility as string) ?? "all",
       }
 
       switch (section.type) {

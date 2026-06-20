@@ -30,10 +30,11 @@ export function CategoryCarousel({ categories, countryCode }: Props) {
         <ChevronLeft size={20} />
       </button>
 
-      {/* Scroll rail — on mobile: no arrows so no side padding needed; add pe-6 for peek effect */}
+      {/* Scroll rail — full-bleed on mobile (breaks out of the page's px-6 so items
+          scroll all the way to the device edges); restored to normal at sm+ for arrows. */}
       <div
         ref={rail}
-        className="flex gap-4 overflow-x-auto pb-2 pe-6 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex gap-4 overflow-x-auto pb-2 -mx-6 ps-6 pe-6 sm:mx-0 sm:ps-0 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {categories.map((cat) => (
           <Link
@@ -49,7 +50,7 @@ export function CategoryCarousel({ categories, countryCode }: Props) {
                     src={cat.thumbnail}
                     alt={cat.name}
                     fill
-                    className="object-contain"
+                    className="object-cover"
                   />
                 </div>
               ) : (

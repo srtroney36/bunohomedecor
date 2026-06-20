@@ -116,9 +116,7 @@ export default async function Nav() {
           </div>
         </nav>
       </header>
-      <div className="hidden lg:block">
-        <CategoryBar categories={topLevelCategories} />
-      </div>
+      <CategoryBar categories={topLevelCategories} />
     </div>
   )
 }

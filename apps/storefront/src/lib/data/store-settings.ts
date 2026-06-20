@@ -10,7 +10,7 @@ export async function getStoreSettings(): Promise<StoreContactSettings> {
   try {
     const res = await fetch(`${BACKEND}/store/settings`, {
       headers: { "x-publishable-api-key": PK },
-      next: { revalidate: 300 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return { whatsapp_number: null, order_phone: null }
     return res.json()
@@ -96,7 +96,7 @@ export async function getStorefrontCardSettings(): Promise<StorefrontCardSetting
   try {
     const res = await fetch(`${BACKEND}/store/storefront-settings`, {
       headers: { "x-publishable-api-key": PK },
-      next: { revalidate: 300 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return CARD_DEFAULTS
     const data = await res.json()

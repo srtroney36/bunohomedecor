@@ -238,7 +238,7 @@ const SideMenu = ({ regions, locales, currentLocale, categories, brands }: SideM
                   Home
                 </LocalizedClientLink>
                 <LocalizedClientLink href="/store" className={rowCls} onClick={close}>
-                  Store
+                  All Products
                 </LocalizedClientLink>
                 {hasCategories && (
                   <p className="text-xs uppercase tracking-widest text-ui-fg-muted font-medium px-4 pt-4 pb-1">

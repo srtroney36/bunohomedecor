@@ -2,8 +2,8 @@ import { Suspense } from "react"
 
 import ImageGallery from "@modules/products/components/image-gallery"
 import ProductActions from "@modules/products/components/product-actions"
-import ProductOnboardingCta from "@modules/products/components/product-onboarding-cta"
 import ProductTabs from "@modules/products/components/product-tabs"
+import { Text } from "@modules/common/components/ui"
 import RelatedProducts from "@modules/products/components/related-products"
 import ViewContentTracker from "@modules/products/components/view-content-tracker"
 import ProductInfo from "@modules/products/templates/product-info"
@@ -60,10 +60,16 @@ const ProductTemplate = async ({
           <ImageGallery images={images} />
         </div>
 
-        {/* RIGHT — Product info + actions + tabs (~45%) */}
+        {/* RIGHT — Product header → price/actions → description → tabs (~45%) */}
         <div className="flex flex-col w-full lg:w-[45%] gap-y-6 lg:py-2">
-          <ProductInfo product={product} productBrand={productBrand} />
-          <ProductOnboardingCta />
+          {/* Header: collection, brand, title, model (description hidden here) */}
+          <ProductInfo
+            product={product}
+            productBrand={productBrand}
+            showDescription={false}
+          />
+
+          {/* Price + action buttons first */}
           <Suspense
             fallback={
               <ProductActions
@@ -80,6 +86,17 @@ const ProductTemplate = async ({
               storeSettings={storeSettings}
             />
           </Suspense>
+
+          {/* Description sits just before Product Information */}
+          {product.description && (
+            <Text
+              className="text-sm text-ui-fg-subtle leading-relaxed whitespace-pre-line"
+              data-testid="product-description"
+            >
+              {product.description}
+            </Text>
+          )}
+
           <ProductTabs product={product} />
         </div>
       </div>

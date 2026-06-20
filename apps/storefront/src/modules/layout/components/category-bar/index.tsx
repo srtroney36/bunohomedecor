@@ -46,9 +46,9 @@ function CategoryItem({
   // First item removes left padding so its text aligns with the header brand name
   const linkCls =
     clx(
-      "flex items-center gap-1.5 h-12 text-sm font-medium text-white",
+      "flex items-center gap-1.5 h-9 lg:h-12 text-[13px] lg:text-sm font-medium text-white",
       "hover:bg-white/10 focus:bg-white/10 focus:outline-none transition-colors whitespace-nowrap",
-      isFirst ? "pl-0 pr-4" : "px-4"
+      isFirst ? "pl-0 pr-3 lg:pr-4" : "px-3 lg:px-4"
     )
 
   if (!hasChildren) {
@@ -135,7 +135,7 @@ export default function CategoryBar({
         <li className="flex-shrink-0 border-r border-white/20 mr-2 pr-2">
           <LocalizedClientLink
             href="/store"
-            className="flex items-center h-12 pl-0 pr-4 text-sm font-semibold text-white/90 hover:bg-white/10 focus:bg-white/10 focus:outline-none transition-colors whitespace-nowrap tracking-wide"
+            className="flex items-center h-9 lg:h-12 pl-0 pr-3 lg:pr-4 text-[13px] lg:text-sm font-semibold text-white/90 hover:bg-white/10 focus:bg-white/10 focus:outline-none transition-colors whitespace-nowrap tracking-wide"
           >
             All Products
           </LocalizedClientLink>

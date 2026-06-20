@@ -31,13 +31,22 @@ function MetaEditor({
   onSave,
 }: {
   section: HomeSection
-  onSave: (update: { title?: string; layout?: string }) => Promise<void>
+  onSave: (update: {
+    title?: string
+    layout?: string
+    settings?: Record<string, unknown>
+  }) => Promise<void>
 }) {
   const [title, setTitle] = useState(section.title)
   const [layout, setLayout] = useState(section.layout)
+  const currentVisibility = ((section.settings as any)?.visibility as string) ?? "all"
+  const [visibility, setVisibility] = useState<string>(currentVisibility)
   const [saving, setSaving] = useState(false)
 
-  const isDirty = title !== section.title || layout !== section.layout
+  const isDirty =
+    title !== section.title ||
+    layout !== section.layout ||
+    visibility !== currentVisibility
 
   const save = async () => {
     if (!title.trim()) {
@@ -46,7 +55,7 @@ function MetaEditor({
     }
     setSaving(true)
     try {
-      await onSave({ title: title.trim(), layout })
+      await onSave({ title: title.trim(), layout, settings: { visibility } })
       toast.success("Settings saved")
     } catch {
       toast.error("Failed to save settings")
@@ -82,6 +91,22 @@ function MetaEditor({
                 {l.replace(/_/g, " ")}
               </Select.Item>
             ))}
+          </Select.Content>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-y-1.5">
+        <Label htmlFor="meta-visibility" size="small">
+          Show on
+        </Label>
+        <Select value={visibility} onValueChange={setVisibility}>
+          <Select.Trigger id="meta-visibility">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="all">Desktop &amp; Mobile</Select.Item>
+            <Select.Item value="desktop">Desktop only</Select.Item>
+            <Select.Item value="mobile">Mobile only</Select.Item>
           </Select.Content>
         </Select>
       </div>
@@ -1079,12 +1104,20 @@ export function EditSectionDrawer({
   onOpenChange,
   onUpdated,
 }: EditProps) {
-  const patchSection = async (update: { title?: string; layout?: string }) => {
+  const patchSection = async (update: {
+    title?: string
+    layout?: string
+    settings?: Record<string, unknown>
+  }) => {
     await adminFetch(`/admin/homepage/sections/${section.id}`, {
       method: "POST",
       body: JSON.stringify(update),
     })
-    onUpdated({ id: section.id, ...update })
+    // Merge settings locally so other settings (category_ids, mobile_aspect, …) survive.
+    const mergedSettings = update.settings
+      ? { ...((section.settings as Record<string, unknown>) ?? {}), ...update.settings }
+      : section.settings
+    onUpdated({ id: section.id, ...update, settings: mergedSettings })
   }
 
   return (

@@ -104,7 +104,6 @@ export function HeroCarousel({ section, variant }: Props) {
               className="w-full h-full object-cover"
             />
           </picture>
-          <div className="absolute inset-0 bg-black/40" />
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 gap-3">
             {sl.heading && (
               <h2
@@ -259,7 +258,6 @@ function HeroCarouselSplit({
               alt={splitPanel.heading ?? ""}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/30" />
             <div className="absolute inset-0 flex flex-col items-start justify-end p-5 gap-2">
               {splitPanel.heading && (
                 <h3
@@ -331,7 +329,6 @@ function SplitSlide({
           className="w-full h-full object-cover"
         />
       </picture>
-      <div className="absolute inset-0 bg-black/35" />
       <div
         className={[
           "absolute inset-0 flex flex-col items-start justify-end gap-2",

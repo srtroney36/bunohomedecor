@@ -8,9 +8,21 @@ import "styles/globals.css"
 
 export const metadata: Metadata = {
   metadataBase: new URL(getBaseURL()),
-  title: brand.storeName,
+  title: { default: brand.storeName, template: `%s | ${brand.storeName}` },
   description: brand.tagline,
-  icons: { icon: brand.faviconPath },
+  applicationName: brand.storeName,
+  openGraph: {
+    title: brand.storeName,
+    description: brand.tagline,
+    siteName: brand.storeName,
+    type: "website",
+    url: getBaseURL(),
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: brand.storeName,
+    description: brand.tagline,
+  },
 }
 
 export default function RootLayout(props: { children: React.ReactNode }) {

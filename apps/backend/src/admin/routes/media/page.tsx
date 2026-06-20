@@ -41,6 +41,7 @@ type MediaFile = {
 
 type MediaResponse = {
   s3_configured: boolean
+  error?: string
   files: MediaFile[]
   summary: {
     total: number
@@ -154,6 +155,21 @@ const MediaPage = () => {
             The Media Library requires S3 / R2 storage. Set the S3_* environment variables on the
             backend to enable it. (Local-disk dev storage is not browsable here.)
           </Text>
+        ) : data.error ? (
+          <div className="flex flex-col gap-y-3">
+            <Text size="small" className="text-ui-fg-error">
+              Couldn&apos;t read the storage bucket: {data.error}
+            </Text>
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Check the backend S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY and
+              that the bucket is reachable from the backend, then retry.
+            </Text>
+            <div>
+              <Button size="small" variant="secondary" disabled={loading} onClick={load}>
+                Retry
+              </Button>
+            </div>
+          </div>
         ) : data.files.length === 0 ? (
           <Text size="small" className="text-ui-fg-muted">
             No files in the bucket yet.

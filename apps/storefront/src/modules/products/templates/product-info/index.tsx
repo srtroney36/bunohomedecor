@@ -7,9 +7,11 @@ import { StoreBrand } from "@lib/data/brands"
 type ProductInfoProps = {
   product: HttpTypes.StoreProduct
   productBrand?: StoreBrand | null
+  /** When false, the description is rendered elsewhere (e.g. below the price/actions). */
+  showDescription?: boolean
 }
 
-const ProductInfo = ({ product, productBrand }: ProductInfoProps) => {
+const ProductInfo = ({ product, productBrand, showDescription = true }: ProductInfoProps) => {
   const modelNumber = product.metadata?.model_number as string | undefined
 
   return (
@@ -60,7 +62,7 @@ const ProductInfo = ({ product, productBrand }: ProductInfoProps) => {
           </p>
         )}
 
-        {product.description && (
+        {showDescription && product.description && (
           <Text
             className="text-sm text-ui-fg-subtle leading-relaxed whitespace-pre-line"
             data-testid="product-description"

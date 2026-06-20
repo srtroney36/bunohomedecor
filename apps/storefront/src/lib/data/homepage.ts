@@ -8,7 +8,7 @@ export async function getHomepageSections(): Promise<HomepageSection[]> {
   try {
     const res = await fetch(`${BACKEND}/store/homepage`, {
       headers: { "x-publishable-api-key": PK },
-      next: { revalidate: 60 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return []
     const { sections } = (await res.json()) as { sections: HomepageSection[] }

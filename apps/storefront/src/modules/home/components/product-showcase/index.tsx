@@ -1,21 +1,42 @@
 import Image from "next/image"
 import Link from "next/link"
+import type { HttpTypes } from "@medusajs/types"
 import type {
   HomepageProduct,
   ProductShowcaseSection,
   SectionProps,
 } from "@modules/home/types"
+import StoreProductCard from "@modules/products/components/product-card"
+import { listProducts } from "@lib/data/products"
+import { getRegion } from "@lib/data/regions"
 import { ProductCarousel } from "./product-carousel"
 
 interface Props extends SectionProps {
   variant: "grid_4" | "grid_2" | "carousel" | "list"
 }
 
-export function ProductShowcase({ section, variant, countryCode }: Props) {
+export async function ProductShowcase({ section, variant, countryCode }: Props) {
   const s = section as ProductShowcaseSection
   const products = s.products ?? []
   if (products.length === 0) return null
   const mobileLayout = s.mobile_layout ?? "grid_2"
+
+  // Fetch full product objects (in the section's order) so the standard grids can
+  // reuse the store's configured ProductCard (style, fields, buttons, badges, price).
+  const region = await getRegion(countryCode)
+  let ordered: HttpTypes.StoreProduct[] = []
+  if (region) {
+    const ids = products.map((p) => p.id)
+    const { response } = await listProducts({
+      countryCode,
+      queryParams: { id: ids, limit: ids.length } as any,
+    })
+    const byId = new Map(response.products.map((p) => [p.id, p]))
+    ordered = ids
+      .map((id) => byId.get(id))
+      .filter((p): p is HttpTypes.StoreProduct => Boolean(p))
+  }
+  const useShared = !!region && ordered.length > 0
 
   return (
     <section className="py-12">
@@ -38,9 +59,17 @@ export function ProductShowcase({ section, variant, countryCode }: Props) {
 
         {/* Mobile layout (visible below sm = 640px) */}
         <div className="block sm:hidden">
-          {mobileLayout === "grid_2" && (
-            <MobileProductGrid products={products} countryCode={countryCode} />
-          )}
+          {mobileLayout === "grid_2" &&
+            (useShared ? (
+              <SharedGrid
+                products={ordered}
+                region={region!}
+                countryCode={countryCode}
+                className="grid grid-cols-2 gap-3"
+              />
+            ) : (
+              <MobileProductGrid products={products} countryCode={countryCode} />
+            ))}
           {mobileLayout === "carousel" && (
             <ProductCarousel products={products} countryCode={countryCode} />
           )}
@@ -55,9 +84,17 @@ export function ProductShowcase({ section, variant, countryCode }: Props) {
 
         {/* Desktop layout (visible at sm and above) */}
         <div className="hidden sm:block">
-          {variant === "grid_4" && (
-            <ProductGrid products={products} countryCode={countryCode} />
-          )}
+          {variant === "grid_4" &&
+            (useShared ? (
+              <SharedGrid
+                products={ordered}
+                region={region!}
+                countryCode={countryCode}
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6"
+              />
+            ) : (
+              <ProductGrid products={products} countryCode={countryCode} />
+            ))}
           {variant === "grid_2" && (
             <BestSellingGrid products={products} countryCode={countryCode} />
           )}
@@ -73,6 +110,27 @@ export function ProductShowcase({ section, variant, countryCode }: Props) {
   )
 }
 
+// Standard product grids reuse the store's configured ProductCard.
+function SharedGrid({
+  products,
+  region,
+  countryCode,
+  className,
+}: {
+  products: HttpTypes.StoreProduct[]
+  region: HttpTypes.StoreRegion
+  countryCode: string
+  className: string
+}) {
+  return (
+    <div className={className}>
+      {products.map((p) => (
+        <StoreProductCard key={p.id} product={p} region={region} countryCode={countryCode} />
+      ))}
+    </div>
+  )
+}
+
 // ─── Price formatter ──────────────────────────────────────────────────────────
 
 function formatPrice(amount: number, currencyCode: string): string {
@@ -82,9 +140,9 @@ function formatPrice(amount: number, currencyCode: string): string {
       currency: currencyCode.toUpperCase(),
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(amount / 100)
+    }).format(amount)
   } catch {
-    return `${(amount / 100).toLocaleString()} ${currencyCode.toUpperCase()}`
+    return `${amount.toLocaleString()} ${currencyCode.toUpperCase()}`
   }
 }
 

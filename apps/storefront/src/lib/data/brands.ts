@@ -27,7 +27,7 @@ export async function listBrands(): Promise<StoreBrand[]> {
   try {
     const res = await fetch(`${BACKEND}/store/brands`, {
       headers: HEADERS,
-      next: { revalidate: 3600 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return []
     const data = await res.json()
@@ -41,7 +41,7 @@ export async function getBrand(handle: string): Promise<StoreBrandWithProducts |
   try {
     const res = await fetch(`${BACKEND}/store/brands/${handle}`, {
       headers: HEADERS,
-      next: { revalidate: 3600 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return null
     const data = await res.json()
@@ -55,7 +55,7 @@ export async function getBrandByProductId(productId: string): Promise<StoreBrand
   try {
     const res = await fetch(`${BACKEND}/store/brands/by-product/${productId}`, {
       headers: HEADERS,
-      next: { revalidate: 3600 },
+      next: { revalidate: 0 },
     })
     if (!res.ok) return null
     const data = await res.json()
