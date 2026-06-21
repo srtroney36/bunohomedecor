@@ -42,6 +42,7 @@ type MediaFile = {
 type MediaResponse = {
   s3_configured: boolean
   error?: string
+  debug?: { endpoint: string | null; bucket: string; region: string }
   files: MediaFile[]
   summary: {
     total: number
@@ -75,7 +76,7 @@ const MediaPage = () => {
     try {
       setData(await adminFetch<MediaResponse>("/media"))
     } catch {
-      toast.error("Failed to load media library")
+      toast.error("Failed to load storage")
     } finally {
       setLoading(false)
     }
@@ -121,7 +122,7 @@ const MediaPage = () => {
       <Container className="px-6 py-6 flex flex-col gap-y-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <Heading level="h1">Media Library</Heading>
+            <Heading level="h1">Storage Cleanup</Heading>
             <Text size="small" className="text-ui-fg-subtle mt-1">
               Every file in your storage bucket. "Orphan" files are no longer used by any product,
               category, brand, or homepage section and can be safely removed.
@@ -152,7 +153,7 @@ const MediaPage = () => {
           </Text>
         ) : !data?.s3_configured ? (
           <Text size="small" className="text-ui-fg-muted">
-            The Media Library requires S3 / R2 storage. Set the S3_* environment variables on the
+            Storage Cleanup requires S3 / R2 storage. Set the S3_* environment variables on the
             backend to enable it. (Local-disk dev storage is not browsable here.)
           </Text>
         ) : data.error ? (
@@ -164,6 +165,12 @@ const MediaPage = () => {
               Check the backend S3_ENDPOINT / S3_BUCKET / S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY and
               that the bucket is reachable from the backend, then retry.
             </Text>
+            {data.debug && (
+              <Text size="xsmall" className="text-ui-fg-muted">
+                Using → endpoint: <b>{data.debug.endpoint ?? "(none)"}</b> · bucket:{" "}
+                <b>{data.debug.bucket}</b> · region: <b>{data.debug.region}</b>
+              </Text>
+            )}
             <div>
               <Button size="small" variant="secondary" disabled={loading} onClick={load}>
                 Retry
@@ -273,7 +280,7 @@ const MediaPage = () => {
 }
 
 export const config = defineRouteConfig({
-  label: "Media Library",
+  label: "Storage Cleanup",
   icon: Photo,
 })
 

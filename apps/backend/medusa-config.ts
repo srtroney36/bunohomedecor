@@ -39,6 +39,10 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
     },
   },
+  plugins: [
+    // Sales/analytics dashboard in Admin (Orders + Products tabs). No DB tables.
+    { resolve: "@agilo/medusa-analytics-plugin", options: {} },
+  ],
   modules: [
     {
       resolve: "./src/modules/homepage",
@@ -57,6 +61,12 @@ module.exports = defineConfig({
     },
     {
       resolve: "./src/modules/authSettings",
+    },
+    {
+      resolve: "./src/modules/clientErrors",
+    },
+    {
+      resolve: "./src/modules/productCost",
     },
     ...(hasS3
       ? [

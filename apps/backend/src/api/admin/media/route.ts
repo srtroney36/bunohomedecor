@@ -63,12 +63,20 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     // Surface the real reason (bad creds, unreachable endpoint, wrong bucket, …)
     // instead of a generic 500 so the admin page can display it.
     console.error("[media] GET /admin/media failed:", e)
+    let endpointHost: string | null = null
+    try {
+      endpointHost = cfg.endpoint ? new URL(cfg.endpoint).host : null
+    } catch {
+      endpointHost = cfg.endpoint || null
+    }
     res.json({
       s3_configured: true,
       error:
         e?.message ||
         e?.name ||
         "Could not read the storage bucket. Check the backend S3_* settings and that the bucket is reachable.",
+      // Non-secret config the listing is using — helps pinpoint endpoint/bucket/region mistakes.
+      debug: { endpoint: endpointHost, bucket: cfg.bucket, region: cfg.region },
       files: [],
       summary: EMPTY_SUMMARY,
     })
