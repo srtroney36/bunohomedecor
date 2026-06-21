@@ -34,6 +34,20 @@ export default async function initial_data_seed({
     ModuleRegistrationName.FULFILLMENT
   );
 
+  // Idempotency guard — this seed is for a FRESH install only. If a region already
+  // exists the store is already set up, so skip. Without this, the script errors
+  // partway (data already exists), never gets marked complete, and re-runs on every
+  // `db:migrate` — creating duplicate sales channels / stock locations each time.
+  const { data: existingRegions } = await query.graph({
+    entity: "region",
+    fields: ["id"],
+    pagination: { take: 1 },
+  });
+  if (existingRegions.length > 0) {
+    logger.info("Store already seeded — skipping initial-data-seed.");
+    return;
+  }
+
   const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
 
   logger.info("Seeding store data...");
