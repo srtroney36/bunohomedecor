@@ -1,6 +1,6 @@
 import { Migration } from "@medusajs/framework/mikro-orm/migrations";
 
-export class Migration20260630120000 extends Migration {
+export class Migration20260630120001 extends Migration {
 
   override async up(): Promise<void> {
     // Resend / SMS / Twilio secrets moved to environment variables;

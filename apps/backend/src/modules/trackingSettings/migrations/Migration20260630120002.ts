@@ -1,6 +1,6 @@
 import { Migration } from "@medusajs/framework/mikro-orm/migrations";
 
-export class Migration20260630120000 extends Migration {
+export class Migration20260630120002 extends Migration {
 
   override async up(): Promise<void> {
     // CAPI access token moved to META_CAPI_ACCESS_TOKEN env var; "configured" derived at runtime.

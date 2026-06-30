@@ -27,6 +27,9 @@ const StoreSetting = model.define("store_setting", {
   sms_sender_id: model.text().nullable(),
   sms_provider: model.text().nullable(),
   sms_api_url: model.text().nullable(),
+  // Per-provider payment enable toggles, e.g. { stripe: true, sslcommerz: false }.
+  // The provider must also be configured (env) and enabled per-region to appear at checkout.
+  payment_enabled: model.json().nullable(),
 })
 
 export default StoreSetting

@@ -26,6 +26,7 @@ const DEFAULTS = {
   sms_sender_id: null,
   sms_provider: null,
   sms_api_url: null,
+  payment_enabled: null,
 }
 
 // Non-secret, admin-editable fields. Secrets (API keys, tokens) live only in env.
@@ -40,6 +41,8 @@ const SIMPLE_KEYS = [
   // Notification branding / routing (non-secret)
   "resend_from_email", "resend_from_name",
   "sms_sender_id", "sms_provider", "sms_api_url",
+  // Per-provider payment enable toggles (json map)
+  "payment_enabled",
 ] as const
 
 function withConfigured(setting: Record<string, unknown>) {

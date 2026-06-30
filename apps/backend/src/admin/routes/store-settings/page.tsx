@@ -6,6 +6,9 @@ import {
   ChartBar,
   Key,
   EnvelopeSolid,
+  ChatBubbleLeftRight,
+  Photo,
+  ExclamationCircle,
   ChevronDownMini,
   ChevronUpMini,
 } from "@medusajs/icons"
@@ -25,6 +28,8 @@ import { CouriersSection } from "./sections/couriers-section"
 import { TrackingSection } from "./sections/tracking-section"
 import { AuthSection } from "./sections/auth-section"
 import { NotificationsSection } from "./sections/notifications-section"
+import { StorageSection } from "./sections/storage-section"
+import { ErrorLogSection } from "./sections/error-log-section"
 
 // ── Collapsible category wrapper ───────────────────────────────────────────────
 
@@ -105,12 +110,6 @@ function ContactSettings() {
 
   return (
     <Container className="px-6 py-6 flex flex-col gap-y-6">
-      <div>
-        <Heading level="h2">Storefront Contact Buttons</Heading>
-        <Text size="small" className="text-ui-fg-subtle mt-1">
-          Configure contact buttons shown on product pages.
-        </Text>
-      </div>
       <div className="flex flex-col gap-y-4">
         <div className="flex flex-col gap-y-1">
           <Label>WhatsApp Number</Label>
@@ -149,7 +148,9 @@ const StoreSettingsPage = () => {
         </Text>
       </div>
 
-      <ContactSettings />
+      <CategorySection title="Storefront Contact Buttons" description="WhatsApp & call buttons on product pages" icon={ChatBubbleLeftRight} defaultOpen>
+        <ContactSettings />
+      </CategorySection>
 
       <CategorySection title="Payments" description="Stripe, SSLCommerz, bKash" icon={CreditCardSolid}>
         <PaymentsSection />
@@ -169,6 +170,14 @@ const StoreSettingsPage = () => {
 
       <CategorySection title="Notifications" description="Email (Resend), SMS" icon={EnvelopeSolid}>
         <NotificationsSection />
+      </CategorySection>
+
+      <CategorySection title="Storage Cleanup" description="Remove unused files from your storage bucket" icon={Photo}>
+        <StorageSection />
+      </CategorySection>
+
+      <CategorySection title="Error Log" description="Errors customers hit on the storefront" icon={ExclamationCircle}>
+        <ErrorLogSection />
       </CategorySection>
     </div>
   )

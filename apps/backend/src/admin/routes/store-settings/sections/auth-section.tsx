@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Container, Text, Badge, Button, Input, Switch, toast } from "@medusajs/ui"
 import { adminFetch } from "../../../lib/api"
+import { NotConfiguredNotice } from "../../../components/integration-setup-guide"
 
 type AuthSettings = {
   google_enabled: boolean
@@ -107,6 +108,11 @@ export function AuthSection() {
               ? "It is currently set on the server."
               : "It is not set yet — add it and restart the server."}
           </Text>
+          {!data?.google_configured && (
+            <NotConfiguredNotice className="mt-3">
+              Not configured yet — set the Client ID below and <b>GOOGLE_CLIENT_SECRET</b> on the server (or contact your developer). Until then Google Sign-In stays disabled.
+            </NotConfiguredNotice>
+          )}
         </div>
 
         <div className="px-6 py-4 flex items-center justify-between">
@@ -114,7 +120,7 @@ export function AuthSection() {
             <Text size="small" weight="plus">Enable Google Sign-In</Text>
             <Text size="small" className="text-ui-fg-subtle">Show "Sign in with Google" on the storefront login page</Text>
           </div>
-          <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} />
+          <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} disabled={!data?.google_configured} />
         </div>
 
         <div className="px-6 py-4 flex flex-col gap-y-4">
@@ -146,7 +152,7 @@ export function AuthSection() {
               <Text size="small" className="text-ui-tag-orange-text mt-1">Requires SMS configured (set SMS_API_KEY) — see Notifications below</Text>
             )}
           </div>
-          <Switch checked={phoneOtpEnabled} onCheckedChange={setPhoneOtpEnabled} />
+          <Switch checked={phoneOtpEnabled} onCheckedChange={setPhoneOtpEnabled} disabled={!data?.sms_configured} />
         </div>
 
         <div className="px-6 py-4 grid grid-cols-2 gap-4">

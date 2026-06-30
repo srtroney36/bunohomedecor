@@ -1,6 +1,6 @@
 import { Migration } from "@medusajs/framework/mikro-orm/migrations";
 
-export class Migration20260630120000 extends Migration {
+export class Migration20260630120003 extends Migration {
 
   override async up(): Promise<void> {
     // Google client secret moved to GOOGLE_CLIENT_SECRET env var; "configured" derived at runtime.

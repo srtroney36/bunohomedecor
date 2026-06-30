@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Container, Text, Badge, Button, Input, Switch, toast } from "@medusajs/ui"
 import { adminFetch } from "../../../lib/api"
+import { NotConfiguredNotice } from "../../../components/integration-setup-guide"
 
 type TrackingSettings = {
   meta_pixel_id: string | null
@@ -130,10 +131,15 @@ export function TrackingSection() {
           </div>
         </div>
 
-        <div className="px-6 py-4">
+        <div className="px-6 py-4 flex flex-col gap-y-3">
           <Text size="small" className="text-ui-fg-subtle">
             The CAPI access token is set via the <code className="bg-ui-bg-subtle px-1 rounded text-xs">META_CAPI_ACCESS_TOKEN</code> environment variable. Generate it in Events Manager → your Pixel → Conversions API.
           </Text>
+          {!data?.capi_configured && (
+            <NotConfiguredNotice>
+              Not configured yet — set <b>META_CAPI_ACCESS_TOKEN</b> on the server (or contact your developer). Until then CAPI stays disabled.
+            </NotConfiguredNotice>
+          )}
         </div>
 
         <div className="px-6 py-4 flex items-center justify-between">

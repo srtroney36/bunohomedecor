@@ -162,8 +162,8 @@ export function NotificationsSection() {
 
   return (
     <div className="flex flex-col gap-y-3">
-      <IntegrationSetupGuide config={EMAIL_GUIDE} collapsible />
-      <IntegrationSetupGuide config={SMS_GUIDE} collapsible />
+      <IntegrationSetupGuide config={EMAIL_GUIDE} />
+      <IntegrationSetupGuide config={SMS_GUIDE} />
 
       {/* Email settings */}
       <Container className="p-0 divide-y divide-ui-border-base">
@@ -176,16 +176,16 @@ export function NotificationsSection() {
           <div className="flex flex-col gap-y-1">
             <Label>From Email</Label>
             <Text size="xsmall" className="text-ui-fg-muted">Must be on a domain verified in Resend</Text>
-            <Input value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="noreply@yourdomain.com" disabled={loading} />
+            <Input value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="noreply@yourdomain.com" disabled={loading || !emailConfigured} />
           </div>
           <div className="flex flex-col gap-y-1">
             <Label>From Name</Label>
-            <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="My Store" disabled={loading} />
+            <Input value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="My Store" disabled={loading || !emailConfigured} />
           </div>
           <div className="flex flex-col gap-y-1">
             <Label>Sender Name Override</Label>
             <Text size="xsmall" className="text-ui-fg-muted">Overrides From Name above. Leave blank to use From Name.</Text>
-            <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="My Store" disabled={loading} />
+            <Input value={senderName} onChange={(e) => setSenderName(e.target.value)} placeholder="My Store" disabled={loading || !emailConfigured} />
           </div>
         </div>
 
@@ -195,7 +195,7 @@ export function NotificationsSection() {
               <Label>All Email Notifications</Label>
               <Text size="xsmall" className="text-ui-fg-muted">Master switch — disabling overrides all per-type email settings.</Text>
             </div>
-            <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} disabled={loading} />
+            <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} disabled={loading || !emailConfigured} />
           </div>
           {([
             { label: "Order Placed",   value: orderPlaced,   setter: setOrderPlaced },
@@ -205,7 +205,7 @@ export function NotificationsSection() {
           ] as const).map(({ label, value, setter }) => (
             <div key={label} className="flex items-center justify-between">
               <Label className={!emailEnabled ? "text-ui-fg-muted" : ""}>{label}</Label>
-              <Switch checked={value} onCheckedChange={(v) => setter(v)} disabled={loading || !emailEnabled} />
+              <Switch checked={value} onCheckedChange={(v) => setter(v)} disabled={loading || !emailConfigured || !emailEnabled} />
             </div>
           ))}
         </div>
@@ -222,16 +222,16 @@ export function NotificationsSection() {
           <div className="flex flex-col gap-y-1">
             <Label>Provider</Label>
             <Text size="xsmall" className="text-ui-fg-muted">"twilio" or "generic_http"</Text>
-            <Input value={smsProvider} onChange={(e) => setSmsProvider(e.target.value)} placeholder="twilio" disabled={loading} />
+            <Input value={smsProvider} onChange={(e) => setSmsProvider(e.target.value)} placeholder="twilio" disabled={loading || !smsConfigured} />
           </div>
           <div className="flex flex-col gap-y-1">
             <Label>Sender ID {smsProvider === "twilio" ? "(From Number)" : ""}</Label>
-            <Input value={smsSenderId} onChange={(e) => setSmsSenderId(e.target.value)} placeholder={smsProvider === "twilio" ? "+18005551234" : "MySender"} disabled={loading} />
+            <Input value={smsSenderId} onChange={(e) => setSmsSenderId(e.target.value)} placeholder={smsProvider === "twilio" ? "+18005551234" : "MySender"} disabled={loading || !smsConfigured} />
           </div>
           {smsProvider === "generic_http" && (
             <div className="flex flex-col gap-y-1">
               <Label>API URL</Label>
-              <Input value={smsApiUrl} onChange={(e) => setSmsApiUrl(e.target.value)} placeholder="https://sms.yourgateway.com/api/send" disabled={loading} />
+              <Input value={smsApiUrl} onChange={(e) => setSmsApiUrl(e.target.value)} placeholder="https://sms.yourgateway.com/api/send" disabled={loading || !smsConfigured} />
             </div>
           )}
           <Text size="xsmall" className="text-ui-fg-muted">
@@ -248,7 +248,7 @@ export function NotificationsSection() {
           ] as const).map(({ label, value, setter }) => (
             <div key={label} className="flex items-center justify-between">
               <Label>{label}</Label>
-              <Switch checked={value} onCheckedChange={(v) => setter(v)} disabled={loading} />
+              <Switch checked={value} onCheckedChange={(v) => setter(v)} disabled={loading || !smsConfigured} />
             </div>
           ))}
         </div>

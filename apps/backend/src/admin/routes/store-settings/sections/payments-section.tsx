@@ -1,8 +1,10 @@
-import { Text } from "@medusajs/ui"
+import { useEffect, useState } from "react"
+import { Switch, Text, toast } from "@medusajs/ui"
 import {
   IntegrationSetupGuide,
   type IntegrationGuideConfig,
 } from "../../../components/integration-setup-guide"
+import { adminFetch } from "../../../lib/api"
 
 const STRIPE_GUIDE: IntegrationGuideConfig = {
   integrationId: "stripe",
@@ -126,15 +128,62 @@ const BKASH_GUIDE: IntegrationGuideConfig = {
   ],
 }
 
+const GUIDES = [STRIPE_GUIDE, SSLCOMMERZ_GUIDE, BKASH_GUIDE]
+
 export function PaymentsSection() {
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
+  const [configured, setConfigured] = useState<Record<string, boolean>>({})
+  const [loaded, setLoaded] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    adminFetch<{ setting: { payment_enabled: Record<string, boolean> | null } }>("/store-settings")
+      .then(({ setting }) => setEnabled(setting?.payment_enabled ?? {}))
+      .catch(() => {})
+      .finally(() => setLoaded(true))
+  }, [])
+
+  const toggle = async (id: string, value: boolean) => {
+    const next = { ...enabled, [id]: value }
+    setEnabled(next)
+    setSaving(true)
+    try {
+      await adminFetch("/store-settings", {
+        method: "POST",
+        body: JSON.stringify({ payment_enabled: next }),
+      })
+    } catch {
+      toast.error("Failed to save")
+      setEnabled(enabled) // revert
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-y-2">
       <Text size="small" className="text-ui-fg-subtle">
-        Set each provider's keys in your server environment, then enable it per region in Settings → Regions → Payment Providers.
+        Set each provider's keys in your server environment, then turn it on here. It must also be enabled
+        per region in Settings → Regions → Payment Providers to appear at checkout.
       </Text>
-      <IntegrationSetupGuide config={STRIPE_GUIDE} collapsible />
-      <IntegrationSetupGuide config={SSLCOMMERZ_GUIDE} collapsible />
-      <IntegrationSetupGuide config={BKASH_GUIDE} collapsible />
+      {GUIDES.map((guide) => {
+        const id = guide.integrationId
+        const isConfigured = configured[id] ?? false
+        return (
+          <IntegrationSetupGuide
+            key={id}
+            config={guide}
+            onStatusChange={(c) => setConfigured((prev) => ({ ...prev, [id]: c }))}
+            rightSlot={
+              <Switch
+                checked={Boolean(enabled[id])}
+                disabled={!isConfigured || !loaded || saving}
+                onCheckedChange={(v) => toggle(id, v)}
+              />
+            }
+          />
+        )
+      })}
     </div>
   )
 }

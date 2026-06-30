@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Container, Text, Badge, Button, Input, Switch, Alert, toast } from "@medusajs/ui"
+import { Text, Badge, Button, Input, Alert, toast } from "@medusajs/ui"
 import {
   IntegrationSetupGuide,
   type IntegrationGuideConfig,
@@ -91,6 +91,7 @@ const ORDER = ["steadfast", "redx", "pathao"] as const
 
 function CourierControls({ courier, onChanged }: { courier: CourierRow; onChanged: () => void }) {
   const [pickup, setPickup] = useState<string>((courier.settings?.pickup_address as string) ?? "")
+  const disabled = !courier.configured
 
   const activateMutation = useMutation({
     mutationFn: () => adminFetch(`/couriers/${courier.id}/activate`, { method: "POST" }),
@@ -106,8 +107,8 @@ function CourierControls({ courier, onChanged }: { courier: CourierRow; onChange
   })
 
   return (
-    <Container className="p-0 divide-y divide-ui-border-base">
-      <div className="flex items-center justify-between px-6 py-4">
+    <div className="flex flex-col gap-y-4">
+      <div className="flex items-center justify-between">
         <div>
           <Text size="small" weight="plus">Set as active courier</Text>
           <Text size="small" className="text-ui-fg-subtle">
@@ -119,7 +120,7 @@ function CourierControls({ courier, onChanged }: { courier: CourierRow; onChange
           <Button
             size="small"
             variant={courier.is_active ? "secondary" : "primary"}
-            disabled={!courier.configured || courier.is_active || activateMutation.isPending}
+            disabled={disabled || courier.is_active || activateMutation.isPending}
             isLoading={activateMutation.isPending}
             onClick={() => activateMutation.mutate()}
           >
@@ -128,21 +129,22 @@ function CourierControls({ courier, onChanged }: { courier: CourierRow; onChange
         </div>
       </div>
 
-      <div className="px-6 py-4 flex items-end gap-x-3">
+      <div className="flex items-end gap-x-3">
         <div className="flex flex-col gap-y-1 flex-1">
           <Text size="small" weight="plus">Pickup address (optional)</Text>
-          <Input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Warehouse / pickup point address" />
+          <Input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Warehouse / pickup point address" disabled={disabled} />
         </div>
         <Button
           size="small"
           variant="secondary"
           isLoading={saveMutation.isPending}
+          disabled={disabled || saveMutation.isPending}
           onClick={() => saveMutation.mutate({ settings: { pickup_address: pickup || null } })}
         >
           Save
         </Button>
       </div>
-    </Container>
+    </div>
   )
 }
 
@@ -169,9 +171,10 @@ export function CouriersSection() {
       {isLoading && <Text size="small" className="text-ui-fg-subtle">Loading couriers…</Text>}
 
       {couriers.map((courier) => (
-        <div key={courier.id} className="flex flex-col gap-y-2">
-          <IntegrationSetupGuide config={COURIER_GUIDES[courier.courier_id]} collapsible />
-          <CourierControls courier={courier} onChanged={refresh} />
+        <div key={courier.id}>
+          <IntegrationSetupGuide config={COURIER_GUIDES[courier.courier_id]}>
+            <CourierControls courier={courier} onChanged={refresh} />
+          </IntegrationSetupGuide>
         </div>
       ))}
     </div>
