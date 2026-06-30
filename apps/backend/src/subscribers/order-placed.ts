@@ -1,7 +1,6 @@
 import { SubscriberArgs, type SubscriberConfig } from "@medusajs/framework"
 import { TRACKING_SETTINGS_MODULE } from "../modules/trackingSettings"
-import { decryptSecret } from "../lib/crypto"
-import type { EncryptedPayload } from "../lib/crypto"
+import { capiEnvConfigured } from "../lib/integration-env"
 import { sendCapiPurchase } from "../lib/capi"
 
 export default async function orderPlacedHandler({
@@ -68,8 +67,8 @@ export default async function orderPlacedHandler({
     const [rows] = await trackingSvc.listAndCountTrackingSettings({}, { take: 1 })
     const t = rows?.[0]
 
-    if (t?.capi_enabled && t?.capi_configured && t?.purchase_event_enabled && t?.meta_pixel_id) {
-      const token = decryptSecret(t.capi_token_encrypted as EncryptedPayload)
+    if (t?.capi_enabled && capiEnvConfigured() && t?.purchase_event_enabled && t?.meta_pixel_id) {
+      const token = process.env.META_CAPI_ACCESS_TOKEN as string
 
       // order.total is in smallest currency unit (cents for USD) — divide by 100
       const value = (order.total ?? 0) / 100

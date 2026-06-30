@@ -1,7 +1,6 @@
 import type { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework"
 import { TRACKING_SETTINGS_MODULE } from "../../../../modules/trackingSettings"
-import { decryptSecret } from "../../../../lib/crypto"
-import type { EncryptedPayload } from "../../../../lib/crypto"
+import { capiEnvConfigured } from "../../../../lib/integration-env"
 import { sendCapiPurchase } from "../../../../lib/capi"
 
 // Simple in-memory rate limiter: max 2 requests per 60 seconds
@@ -25,10 +24,10 @@ export const POST = async (
     return res.status(429).json({ success: false, message: "Rate limited — max 2 test events per minute" })
   }
 
-  if (!process.env.APP_SECRETS_ENCRYPTION_KEY && !process.env.COURIER_CONFIG_ENCRYPTION_KEY) {
-    return res.status(503).json({
+  if (!capiEnvConfigured()) {
+    return res.status(400).json({
       success: false,
-      message: "APP_SECRETS_ENCRYPTION_KEY is not set in .env — cannot decrypt CAPI token",
+      message: "META_CAPI_ACCESS_TOKEN is not set in your server environment",
     })
   }
 
@@ -36,20 +35,11 @@ export const POST = async (
   const [rows] = await svc.listAndCountTrackingSettings({}, { take: 1 })
   const row = rows?.[0]
 
-  if (!row?.capi_configured || !row?.capi_token_encrypted) {
-    return res.status(400).json({ success: false, message: "CAPI token is not configured" })
-  }
-
   if (!row?.meta_pixel_id) {
     return res.status(400).json({ success: false, message: "Meta Pixel ID is not configured" })
   }
 
-  let token: string
-  try {
-    token = decryptSecret(row.capi_token_encrypted as EncryptedPayload)
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: `Token decryption failed: ${err.message}` })
-  }
+  const token = process.env.META_CAPI_ACCESS_TOKEN as string
 
   try {
     await sendCapiPurchase({

@@ -5,9 +5,8 @@ const CourierConfig = model.define("courier_config", {
   courier_id: model.text(),                      // "steadfast" | "redx" | "pathao"
   enabled: model.boolean().default(false),
   is_active: model.boolean().default(false),
-  configured: model.boolean().default(false),
-  credentials_encrypted: model.json().nullable(), // EncryptedPayload | null
-  settings: model.json().nullable(),              // non-secret prefs: { sandbox: bool, ... }
+  // Secrets live in environment variables; "configured" is derived at runtime.
+  settings: model.json().nullable(),              // non-secret prefs: { pickup_address, ... }
 })
 
 export default CourierConfig

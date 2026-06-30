@@ -1,5 +1,11 @@
 import type { MedusaContainer } from "@medusajs/framework"
-import { STORE_SETTINGS_MODULE } from "../modules/storeSettings"
+import {
+  emailEnvConfigured,
+  smsEnvConfigured,
+  capiEnvConfigured,
+  googleSecretConfigured,
+  getCourierCreds,
+} from "../lib/integration-env"
 
 export type EnvVarDef = {
   key: string
@@ -35,24 +41,12 @@ export function buildVarDisplay(def: EnvVarDef): string | null {
   return value
 }
 
-async function isEmailConfigured(container: MedusaContainer): Promise<boolean> {
-  try {
-    const svc = (container as any).resolve(STORE_SETTINGS_MODULE) as any
-    const [settings] = await svc.listStoreSettings({}, { take: 1 })
-    return !!settings?.email_configured
-  } catch {
-    return false
-  }
+async function isEmailConfigured(): Promise<boolean> {
+  return emailEnvConfigured()
 }
 
-async function isSmsConfigured(container: MedusaContainer): Promise<boolean> {
-  try {
-    const svc = (container as any).resolve(STORE_SETTINGS_MODULE) as any
-    const [settings] = await svc.listStoreSettings({}, { take: 1 })
-    return !!settings?.sms_configured
-  } catch {
-    return false
-  }
+async function isSmsConfigured(): Promise<boolean> {
+  return smsEnvConfigured()
 }
 
 const REGISTRY: Record<string, IntegrationDef> = {
@@ -180,12 +174,18 @@ const REGISTRY: Record<string, IntegrationDef> = {
   sms: {
     id: "sms",
     label: "Transactional SMS",
-    env: [],  // All SMS credentials are managed via admin form
+    env: [
+      { key: "SMS_API_KEY",       required: true,  secret: true },
+      { key: "TWILIO_AUTH_TOKEN", required: false, secret: true },
+      { key: "SMS_PROVIDER",      required: false },
+      { key: "SMS_SENDER_ID",     required: false },
+      { key: "SMS_API_URL",       required: false },
+    ],
     isConfigured: isSmsConfigured,
     test: async (container, input) => {
-      const configured = await isSmsConfigured(container)
+      const configured = await isSmsConfigured()
       if (!configured)
-        return { success: false, message: "SMS credentials not configured. Enter them in the Credentials section on this page, or add SMS_API_KEY to .env." }
+        return { success: false, message: "SMS not configured — set SMS_API_KEY in your server environment and restart." }
       const to = (input.to ?? "").replace(/[\s\-().]/g, "")
       if (!/^\+\d{7,15}$/.test(to))
         return { success: false, message: `"${input.to}" is not a valid E.164 phone number. Use format: +8801XXXXXXXXX` }
@@ -207,14 +207,15 @@ const REGISTRY: Record<string, IntegrationDef> = {
     id: "email",
     label: "Transactional Email (Resend)",
     env: [
-      // Only non-credential env var still needed for email templates
-      { key: "STORE_URL", required: false },
+      { key: "RESEND_API_KEY",   required: true,  secret: true },
+      { key: "RESEND_FROM_EMAIL", required: false, mask: "email" },
+      { key: "STORE_URL",         required: false },
     ],
     isConfigured: isEmailConfigured,
     test: async (container, input) => {
-      const configured = await isEmailConfigured(container)
+      const configured = await isEmailConfigured()
       if (!configured)
-        return { success: false, message: "Resend credentials not configured. Enter your API key in the Credentials section on this page, or add RESEND_API_KEY to .env." }
+        return { success: false, message: "Resend not configured — set RESEND_API_KEY in your server environment and restart." }
       if (!input.to)
         return { success: false, message: "No recipient email provided." }
       try {
@@ -230,6 +231,109 @@ const REGISTRY: Record<string, IntegrationDef> = {
         return { success: false, message: err.message }
       }
     },
+  },
+  steadfast: {
+    id: "steadfast",
+    label: "Steadfast Courier",
+    env: [
+      { key: "STEADFAST_API_KEY",    required: true, secret: true },
+      { key: "STEADFAST_SECRET_KEY", required: true, secret: true },
+    ],
+    test: async () => {
+      const creds = getCourierCreds("steadfast")
+      if (!creds) return { success: false, message: "Steadfast not configured — set STEADFAST_API_KEY and STEADFAST_SECRET_KEY." }
+      try {
+        const res = await fetch("https://portal.packzy.com/api/v1/get_balance", {
+          headers: { "Api-Key": creds.api_key, "Secret-Key": creds.secret_key, "Content-Type": "application/json" },
+        })
+        if (res.status === 401 || res.status === 403) return { success: false, message: "Steadfast: invalid API key or secret." }
+        if (!res.ok) return { success: false, message: `Steadfast API returned HTTP ${res.status}` }
+        const json = (await res.json()) as any
+        if (json.status && json.status !== 200) return { success: false, message: `Steadfast: ${json.message ?? json.status}` }
+        const balance = json.current_balance ?? json.balance ?? "—"
+        return { success: true, message: `Steadfast connected. Balance: ৳${balance}` }
+      } catch (err: any) {
+        return { success: false, message: err.message }
+      }
+    },
+  },
+  redx: {
+    id: "redx",
+    label: "RedX",
+    env: [
+      { key: "REDX_API_TOKEN", required: true, secret: true },
+      { key: "REDX_SANDBOX",   required: false },
+    ],
+    test: async () => {
+      const creds = getCourierCreds("redx")
+      if (!creds) return { success: false, message: "RedX not configured — set REDX_API_TOKEN." }
+      const sandbox = creds.sandbox === "true"
+      const base = sandbox ? "https://sandbox.redx.com.bd" : "https://openapi.redx.com.bd"
+      try {
+        const res = await fetch(`${base}/v1.0.0-beta/parcel/info`, {
+          headers: { Authorization: `Bearer ${creds.api_token}`, "Content-Type": "application/json" },
+        })
+        if (res.status === 401 || res.status === 403) return { success: false, message: "RedX: invalid API token." }
+        if (res.status === 404) return { success: true, message: `RedX (${sandbox ? "sandbox" : "live"}) token is valid.` }
+        if (!res.ok) return { success: false, message: `RedX API returned HTTP ${res.status}` }
+        return { success: true, message: `RedX (${sandbox ? "sandbox" : "live"}) connected.` }
+      } catch (err: any) {
+        return { success: false, message: err.message }
+      }
+    },
+  },
+  pathao: {
+    id: "pathao",
+    label: "Pathao",
+    env: [
+      { key: "PATHAO_CLIENT_ID",     required: true,  secret: true },
+      { key: "PATHAO_CLIENT_SECRET", required: true,  secret: true },
+      { key: "PATHAO_USERNAME",      required: true },
+      { key: "PATHAO_PASSWORD",      required: true,  secret: true },
+      { key: "PATHAO_STORE_ID",      required: false },
+      { key: "PATHAO_SANDBOX",       required: false },
+    ],
+    test: async () => {
+      const creds = getCourierCreds("pathao")
+      if (!creds) return { success: false, message: "Pathao not configured — set PATHAO_CLIENT_ID, PATHAO_CLIENT_SECRET, PATHAO_USERNAME, PATHAO_PASSWORD." }
+      const sandbox = creds.sandbox === "true"
+      const base = sandbox ? "https://courier-api-sandbox.pathao.com" : "https://api-hermes.pathao.com"
+      try {
+        const res = await fetch(`${base}/aladdin/api/v1/issue-token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            client_id: creds.client_id,
+            client_secret: creds.client_secret,
+            username: creds.username,
+            password: creds.password,
+            grant_type: "password",
+          }),
+        })
+        if (!res.ok) return { success: false, message: `Pathao token grant failed: HTTP ${res.status}` }
+        const json = (await res.json()) as any
+        if (!json.access_token) return { success: false, message: `Pathao: ${json.message ?? "token grant failed"}` }
+        return { success: true, message: `Pathao (${sandbox ? "sandbox" : "live"}) credentials are valid.` }
+      } catch (err: any) {
+        return { success: false, message: err.message }
+      }
+    },
+  },
+  capi: {
+    id: "capi",
+    label: "Meta Conversions API",
+    env: [
+      { key: "META_CAPI_ACCESS_TOKEN", required: true, secret: true },
+    ],
+    isConfigured: async () => capiEnvConfigured(),
+  },
+  google: {
+    id: "google",
+    label: "Google Sign-In",
+    env: [
+      { key: "GOOGLE_CLIENT_SECRET", required: true, secret: true },
+    ],
+    isConfigured: async () => googleSecretConfigured(),
   },
 }
 

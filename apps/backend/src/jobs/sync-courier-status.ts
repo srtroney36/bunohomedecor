@@ -1,8 +1,7 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { Modules } from "@medusajs/framework/utils"
 import { COURIER_CONFIG_MODULE } from "../modules/courierConfig"
-import { decryptSecret } from "../lib/crypto"
-import type { EncryptedPayload } from "../lib/crypto"
+import { getCourierCreds } from "../lib/integration-env"
 import { steadfastAdapter } from "../modules/courierConfig/adapters/steadfast"
 import { redxAdapter } from "../modules/courierConfig/adapters/redx"
 import { pathaoAdapter } from "../modules/courierConfig/adapters/pathao"
@@ -26,9 +25,9 @@ export default async function syncCourierStatus({ container }: { container: Medu
 
   logger.info("[courier:sync] Running courier status sync job")
 
-  // 1. Find active courier + decrypt credentials once
+  // 1. Find active courier + resolve credentials from env once
   const courierConfigService = container.resolve(COURIER_CONFIG_MODULE) as any
-  const [configs] = await courierConfigService.listAndCountCourierConfigs({ is_active: true, configured: true })
+  const [configs] = await courierConfigService.listAndCountCourierConfigs({ is_active: true })
 
   if (!configs || configs.length === 0) {
     logger.info("[courier:sync] No active courier configured — nothing to sync")
@@ -43,19 +42,9 @@ export default async function syncCourierStatus({ container }: { container: Medu
     return
   }
 
-  const encryptedBlob = config.credentials_encrypted as Record<string, EncryptedPayload> | null
-  if (!encryptedBlob) {
-    logger.warn("[courier:sync] Active courier has no credentials")
-    return
-  }
-
-  let credentials: Record<string, string> = {}
-  try {
-    for (const [field, payload] of Object.entries(encryptedBlob)) {
-      credentials[field] = decryptSecret(payload)
-    }
-  } catch (err: any) {
-    logger.error(`[courier:sync] Failed to decrypt credentials: ${err.message}`)
+  const credentials = getCourierCreds(config.courier_id)
+  if (!credentials) {
+    logger.warn(`[courier:sync] Active courier "${config.courier_id}" credentials not set in environment`)
     return
   }
 

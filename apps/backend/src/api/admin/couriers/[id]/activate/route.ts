@@ -1,5 +1,6 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { COURIER_CONFIG_MODULE } from "../../../../../modules/courierConfig"
+import { courierEnvConfigured } from "../../../../../lib/integration-env"
 
 // POST /admin/couriers/:id/activate — set this courier active, deactivate all others
 export async function POST(
@@ -14,10 +15,10 @@ export async function POST(
     return res.status(404).json({ error: `Courier "${courierId}" not found` })
   }
 
-  if (!target.configured) {
+  if (!courierEnvConfigured(courierId)) {
     return res
       .status(400)
-      .json({ error: `Courier "${courierId}" is not configured — save credentials first` })
+      .json({ error: `Courier "${courierId}" is not configured — set its environment variables first` })
   }
 
   const all = await svc.listCourierConfigs({})

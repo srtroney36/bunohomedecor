@@ -1,8 +1,7 @@
 import type { SubscriberArgs, SubscriberConfig } from "@medusajs/framework"
 import { Modules } from "@medusajs/framework/utils"
 import { COURIER_CONFIG_MODULE } from "../modules/courierConfig"
-import { decryptSecret } from "../lib/crypto"
-import type { EncryptedPayload } from "../lib/crypto"
+import { getCourierCreds } from "../lib/integration-env"
 import { steadfastAdapter } from "../modules/courierConfig/adapters/steadfast"
 import { redxAdapter } from "../modules/courierConfig/adapters/redx"
 import { pathaoAdapter } from "../modules/courierConfig/adapters/pathao"
@@ -25,10 +24,10 @@ export default async function fulfillmentCreatedHandler({
 
   // 1. Find active courier configuration
   const courierConfigService = container.resolve(COURIER_CONFIG_MODULE) as any
-  const [configs] = await courierConfigService.listAndCountCourierConfigs({ is_active: true, configured: true })
+  const [configs] = await courierConfigService.listAndCountCourierConfigs({ is_active: true })
 
   if (!configs || configs.length === 0) {
-    logger.warn("[courier:subscriber] No active configured courier found — skipping parcel booking")
+    logger.warn("[courier:subscriber] No active courier found — skipping parcel booking")
     return
   }
 
@@ -40,21 +39,10 @@ export default async function fulfillmentCreatedHandler({
     return
   }
 
-  // 2. Decrypt all credential fields
-  let credentials: Record<string, string> = {}
-  const encryptedBlob = config.credentials_encrypted as Record<string, EncryptedPayload> | null
-
-  if (!encryptedBlob) {
-    logger.warn(`[courier:subscriber] Courier "${config.courier_id}" has no credentials — skipping`)
-    return
-  }
-
-  try {
-    for (const [field, payload] of Object.entries(encryptedBlob)) {
-      credentials[field] = decryptSecret(payload)
-    }
-  } catch (err: any) {
-    logger.error(`[courier:subscriber] Failed to decrypt credentials for "${config.courier_id}": ${err.message}`)
+  // 2. Resolve credentials from environment variables
+  const credentials = getCourierCreds(config.courier_id)
+  if (!credentials) {
+    logger.warn(`[courier:subscriber] Courier "${config.courier_id}" credentials not set in environment — skipping`)
     return
   }
 

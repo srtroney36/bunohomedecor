@@ -1,16 +1,8 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { COURIER_CONFIG_MODULE } from "../../../../modules/courierConfig"
-import { encryptSecret } from "../../../../lib/crypto"
 
-// Credential field names per courier (used to validate / selectively re-encrypt)
-const CREDENTIAL_FIELDS: Record<string, string[]> = {
-  steadfast: ["api_key", "secret_key"],
-  redx: ["api_token"],
-  pathao: ["client_id", "client_secret", "username", "password"],
-}
-
-// POST /admin/couriers/:id — save credentials + settings
-// Blank or omitted credential field = keep existing value unchanged
+// POST /admin/couriers/:id — save non-secret settings + enable toggle.
+// Secrets (API keys) are configured via environment variables, never here.
 export async function POST(
   req: AuthenticatedMedusaRequest,
   res: MedusaResponse
@@ -24,49 +16,18 @@ export async function POST(
     return res.status(404).json({ error: `Courier "${courierId}" not found` })
   }
 
-  // Body shape: { credentials?: { field: value }, settings?: { sandbox, pickup_address } }
-  // Also accept flat credential fields for backwards compatibility
-  const rawCreds: Record<string, string> =
-    (body.credentials as Record<string, string> | undefined) ?? {}
-  const rawSettings: Record<string, unknown> =
-    (body.settings as Record<string, unknown> | undefined) ?? {}
+  const update: Record<string, unknown> = { id: existing.id }
 
-  const fields = CREDENTIAL_FIELDS[courierId] ?? []
-  const incomingCreds: Record<string, unknown> = {}
-  let hasNewSecret = false
+  if ("enabled" in body) update.enabled = Boolean(body.enabled)
 
-  for (const field of fields) {
-    // Check nested credentials object first, then flat body field
-    const val = (rawCreds[field] ?? (body[field] as string | undefined) ?? "").trim()
-    if (val) {
-      incomingCreds[field] = encryptSecret(val)
-      hasNewSecret = true
-    }
-  }
-
-  // Merge with existing encrypted creds (keep fields not being updated)
-  let credentialsEncrypted = existing.credentials_encrypted ?? {}
-  if (hasNewSecret) {
-    credentialsEncrypted = { ...credentialsEncrypted, ...incomingCreds }
-  }
-
-  // Settings (non-secret) — accept nested settings object or flat body fields
+  // Non-secret settings (pickup address). Sandbox is sourced from env, not here.
+  const rawSettings = (body.settings as Record<string, unknown> | undefined) ?? {}
   const settings: Record<string, unknown> = { ...(existing.settings ?? {}) }
-  const sandboxVal = "sandbox" in rawSettings ? rawSettings.sandbox : body.sandbox
-  if (sandboxVal !== undefined) settings.sandbox = Boolean(sandboxVal)
   const pickupVal = "pickup_address" in rawSettings ? rawSettings.pickup_address : body.pickup_address
   if (pickupVal !== undefined) settings.pickup_address = pickupVal
+  update.settings = settings
 
-  const configured = Object.keys(credentialsEncrypted).length >= (fields.length > 0 ? 1 : 1)
-
-  await svc.updateCourierConfigs([
-    {
-      id: existing.id,
-      credentials_encrypted: credentialsEncrypted,
-      settings,
-      configured,
-    },
-  ])
+  await svc.updateCourierConfigs([update])
 
   res.json({ success: true })
 }

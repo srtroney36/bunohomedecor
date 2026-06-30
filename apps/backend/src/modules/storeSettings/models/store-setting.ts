@@ -20,18 +20,13 @@ const StoreSetting = model.define("store_setting", {
   sms_order_placed: model.boolean().default(false),
   sms_order_shipped: model.boolean().default(false),
   sms_order_canceled: model.boolean().default(false),
-  // Email credential storage (encrypted at rest)
-  resend_api_key_encrypted: model.json().nullable(),
+  // Secrets (Resend / SMS API keys, Twilio token) live in environment variables.
+  // These remaining fields are non-secret branding/routing, editable in admin.
   resend_from_email: model.text().nullable(),
   resend_from_name: model.text().nullable(),
-  email_configured: model.boolean().default(false),
-  // SMS credential storage (encrypted at rest)
-  sms_api_key_encrypted: model.json().nullable(),
   sms_sender_id: model.text().nullable(),
   sms_provider: model.text().nullable(),
-  twilio_auth_token_encrypted: model.json().nullable(),
   sms_api_url: model.text().nullable(),
-  sms_configured: model.boolean().default(false),
 })
 
 export default StoreSetting

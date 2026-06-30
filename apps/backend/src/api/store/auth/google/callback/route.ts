@@ -1,7 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework"
 import { AUTH_SETTINGS_MODULE } from "../../../../../modules/authSettings"
-import { decryptSecret } from "../../../../../lib/crypto"
-import type { EncryptedPayload } from "../../../../../lib/crypto"
+import { googleSecretConfigured } from "../../../../../lib/integration-env"
 import { validateAndConsumeState } from "../../../../../lib/google-oauth-state"
 import { generateCustomerToken } from "../../../../../lib/jwt"
 
@@ -33,16 +32,11 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const [rows] = await svc.listAndCountAuthSettings({}, { take: 1 })
   const s = rows?.[0]
 
-  if (!s?.google_enabled || !s?.google_configured) {
+  if (!s?.google_enabled || !s?.google_client_id || !googleSecretConfigured()) {
     return res.status(403).json({ error: "Google auth is not configured" })
   }
 
-  let clientSecret: string
-  try {
-    clientSecret = decryptSecret(s.google_client_secret_encrypted as EncryptedPayload)
-  } catch {
-    return res.status(500).json({ error: "Failed to decrypt Google client secret" })
-  }
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET as string
 
   // Exchange authorization code for tokens
   let tokenData: GoogleTokenResponse

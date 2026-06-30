@@ -1,5 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework"
 import { AUTH_SETTINGS_MODULE } from "../../../../../modules/authSettings"
+import { googleSecretConfigured } from "../../../../../lib/integration-env"
 import { createState } from "../../../../../lib/google-oauth-state"
 
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -7,7 +8,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   const [rows] = await svc.listAndCountAuthSettings({}, { take: 1 })
   const s = rows?.[0]
 
-  if (!s?.google_enabled || !s?.google_configured) {
+  if (!s?.google_enabled || !s?.google_client_id || !s?.google_redirect_uri || !googleSecretConfigured()) {
     return res.status(403).json({ error: "Google auth is not configured" })
   }
 

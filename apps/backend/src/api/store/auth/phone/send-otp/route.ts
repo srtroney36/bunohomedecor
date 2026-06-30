@@ -1,6 +1,6 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework"
 import { AUTH_SETTINGS_MODULE } from "../../../../../modules/authSettings"
-import { STORE_SETTINGS_MODULE } from "../../../../../modules/storeSettings"
+import { smsEnvConfigured } from "../../../../../lib/integration-env"
 import { generateOtp, hashOtp, normalizePhone, isValidPhone } from "../../../../../lib/otp"
 
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
@@ -24,11 +24,9 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   }
 
   // Check SMS is actually configured before generating and storing an OTP that can never be sent
-  const storeSvc = req.scope.resolve(STORE_SETTINGS_MODULE) as any
-  const [storeSettings] = await storeSvc.listStoreSettings({}, { take: 1 })
-  if (!storeSettings?.sms_configured) {
+  if (!smsEnvConfigured()) {
     return res.status(503).json({
-      error: "SMS provider is not configured. Please ask the store administrator to configure SMS in Admin → Notifications.",
+      error: "SMS provider is not configured. Please ask the store administrator to set the SMS environment variables.",
     })
   }
 
