@@ -9,6 +9,7 @@ import {
   ChatBubbleLeftRight,
   Photo,
   ExclamationCircle,
+  Trash,
   ChevronDownMini,
   ChevronUpMini,
 } from "@medusajs/icons"
@@ -30,6 +31,7 @@ import { AuthSection } from "./sections/auth-section"
 import { NotificationsSection } from "./sections/notifications-section"
 import { StorageSection } from "./sections/storage-section"
 import { ErrorLogSection } from "./sections/error-log-section"
+import { DangerZoneSection } from "./sections/danger-zone-section"
 
 // ── Collapsible category wrapper ───────────────────────────────────────────────
 
@@ -178,6 +180,10 @@ const StoreSettingsPage = () => {
 
       <CategorySection title="Error Log" description="Errors customers hit on the storefront" icon={ExclamationCircle}>
         <ErrorLogSection />
+      </CategorySection>
+
+      <CategorySection title="Danger Zone" description="Hard reset inventory, orders, and customer data" icon={Trash}>
+        <DangerZoneSection />
       </CategorySection>
     </div>
   )
