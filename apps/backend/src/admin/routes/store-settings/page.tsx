@@ -192,7 +192,7 @@ const StoreSettingsPage = () => {
 export const config = defineRouteConfig({
   label: "Store Settings",
   icon: AdjustmentsDone,
-  rank: 1,
+  rank: 99,
 })
 
 export default StoreSettingsPage

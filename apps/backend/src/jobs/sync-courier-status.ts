@@ -1,7 +1,8 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
-import { Modules } from "@medusajs/framework/utils"
+import { Modules, ContainerRegistrationKeys } from "@medusajs/framework/utils"
 import { COURIER_CONFIG_MODULE } from "../modules/courierConfig"
 import { getCourierCreds } from "../lib/integration-env"
+import { returnAndRestockOrder } from "../lib/returns"
 import { steadfastAdapter } from "../modules/courierConfig/adapters/steadfast"
 import { redxAdapter } from "../modules/courierConfig/adapters/redx"
 import { pathaoAdapter } from "../modules/courierConfig/adapters/pathao"
@@ -108,6 +109,30 @@ export default async function syncCourierStatus({ container }: { container: Medu
       } catch (err: any) {
         // Method may not exist in all Medusa versions — log and skip
         logger.warn(`[courier:sync] Could not mark fulfillment as delivered: ${err.message}`)
+      }
+    }
+
+    // When the courier returns the parcel, create + receive a native return so
+    // inventory is restocked (idempotent via returnAndRestockOrder). No refund.
+    if (status === "returned") {
+      try {
+        const query = container.resolve(ContainerRegistrationKeys.QUERY)
+        const { data: rows } = await query.graph({
+          entity: "fulfillment",
+          fields: ["id", "order.id"],
+          filters: { id: fulfillment.id },
+        })
+        const orderId = rows?.[0]?.order?.id
+        if (!orderId) {
+          logger.warn(`[courier:sync] No order found for fulfillment ${fulfillment.id} — cannot restock`)
+        } else {
+          const result = await returnAndRestockOrder(container, orderId)
+          logger.info(
+            `[courier:sync] Return for order ${orderId}: ${result.created ? `restocked ${result.items} item(s)` : `skipped (${result.reason})`}`
+          )
+        }
+      } catch (err: any) {
+        logger.error(`[courier:sync] Failed to restock returned fulfillment ${fulfillment.id}: ${err.message}`)
       }
     }
   }

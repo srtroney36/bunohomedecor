@@ -35,7 +35,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       fields: [
         "id", "status", "fulfillment_status", "payment_status", "currency_code",
         "total", "item_total", "shipping_total", "created_at",
-        "items.quantity", "items.variant_id",
+        "items.id", "items.quantity", "items.variant_id", "items.unit_price",
+        "returns.id", "returns.items.item_id", "returns.items.quantity",
       ],
       filters: { created_at: { $gte: from, $lte: to } },
       pagination: { skip: offset, take: 200 },
@@ -57,15 +58,45 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   let codPending = 0
   let currency: string | null = null
   let variantsMissingCost = 0
+  let returnedOrders = 0
+  let returnedValue = 0 // product revenue of returned items
   const seenMissing = new Set<string>()
+
+  // Returned amounts for an order: item revenue + COGS of returned line quantities.
+  const returnedAmounts = (o: any): { revenue: number; cogs: number; hasReturn: boolean } => {
+    const itemById = new Map<string, any>((o.items ?? []).map((it: any) => [it.id, it]))
+    let revenue = 0
+    let retCogs = 0
+    for (const ret of o.returns ?? []) {
+      for (const ri of ret.items ?? []) {
+        const it = itemById.get(ri.item_id)
+        const q = Number(ri.quantity) || 0
+        if (!it || q <= 0) continue
+        revenue += (Number(it.unit_price) || 0) * q
+        const vid = it.variant_id
+        if (vid && costMap.has(vid)) retCogs += (costMap.get(vid) as number) * q
+      }
+    }
+    return { revenue, cogs: retCogs, hasReturn: (o.returns?.length ?? 0) > 0 }
+  }
 
   for (const o of counted) {
     currency = currency || o.currency_code
     const itemTotal = Number(o.item_total) || 0
     const total = Number(o.total) || 0
-    productRevenue += itemTotal
+
+    // Net out anything returned — the product came back to stock.
+    const ret = returnedAmounts(o)
+    const netItem = Math.max(0, itemTotal - ret.revenue)
+    const netTotal = Math.max(0, total - ret.revenue)
+    if (ret.hasReturn) {
+      returnedOrders++
+      returnedValue += ret.revenue
+    }
+
+    productRevenue += netItem
     shippingCollected += Number(o.shipping_total) || 0
-    totalRevenue += total
+    totalRevenue += netTotal
 
     for (const it of o.items || []) {
       const vid = it.variant_id
@@ -77,11 +108,14 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
         variantsMissingCost++
       }
     }
+    // Returned items are back in stock, so their COGS is not a cost.
+    cogs -= ret.cogs
 
-    if (PAID_STATUSES.has(o.payment_status)) codPaid += total
-    else codPending += total
+    if (PAID_STATUSES.has(o.payment_status)) codPaid += netTotal
+    else codPending += netTotal
   }
 
+  cogs = Math.max(0, cogs)
   const grossProfit = productRevenue - cogs
   const marginPct = productRevenue > 0 ? (grossProfit / productRevenue) * 100 : 0
 
@@ -101,6 +135,8 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       cod_paid: codPaid,
       cod_pending: codPending,
       avg_order_value: counted.length ? totalRevenue / counted.length : 0,
+      returned_orders: returnedOrders,
+      returned_value: returnedValue,
     },
   })
 }

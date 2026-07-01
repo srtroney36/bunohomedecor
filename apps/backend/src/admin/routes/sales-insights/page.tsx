@@ -35,6 +35,8 @@ type Insights = {
     cod_paid: number
     cod_pending: number
     avg_order_value: number
+    returned_orders: number
+    returned_value: number
   }
 }
 
@@ -142,7 +144,8 @@ const SalesInsightsPage = () => {
           <div>
             <Heading level="h1">Sales Insights</Heading>
             <Text size="small" className="text-ui-fg-subtle mt-1">
-              Profit/loss, COD, and delivery — over <b>fulfilled</b> orders only.
+              Profit/loss, COD, and delivery — over <b>fulfilled</b> orders. Returned orders are
+              netted out (their items go back to stock), and shown under <b>Returns</b>.
             </Text>
           </div>
         </div>
@@ -210,16 +213,22 @@ const SalesInsightsPage = () => {
 
             {/* COD + delivery */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Kpi label="COD collected (paid)" value={money(m.cod_paid, cur)} accent="green" />
-              <Kpi label="COD pending" value={money(m.cod_pending, cur)} accent="red" />
+              <Kpi label="COD collected (paid)" value={money(m.cod_paid, cur)} hint="payment captured" accent="green" />
+              <Kpi label="COD pending" value={money(m.cod_pending, cur)} hint="delivered/awaiting, not captured" accent="red" />
               <Kpi label="Delivery collected" value={money(m.shipping_collected, cur)} />
-              <Kpi label="Total revenue" value={money(m.total_revenue, cur)} hint="incl. shipping" />
+              <Kpi label="Total revenue" value={money(m.total_revenue, cur)} hint="incl. shipping, net of returns" />
             </div>
 
-            {/* Orders */}
+            {/* Orders + returns */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <Kpi label="Fulfilled orders" value={String(data!.counted_orders)} hint={`${data!.total_orders_in_range} placed in range`} />
               <Kpi label="Avg order value" value={money(m.avg_order_value, cur)} />
+              <Kpi
+                label="Returns"
+                value={String(m.returned_orders)}
+                hint={`${money(m.returned_value, cur)} netted out`}
+                accent={m.returned_orders > 0 ? "red" : "base"}
+              />
             </div>
           </>
         )}
@@ -231,6 +240,7 @@ const SalesInsightsPage = () => {
 export const config = defineRouteConfig({
   label: "Sales Insights",
   icon: CurrencyDollar,
+  rank: 5,
 })
 
 export default SalesInsightsPage

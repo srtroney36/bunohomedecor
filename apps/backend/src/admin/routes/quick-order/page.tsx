@@ -352,6 +352,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export const config = defineRouteConfig({
   label: "New Order",
   icon: ShoppingBag,
+  rank: 1,
 })
 
 export default QuickOrderPage
