@@ -19,5 +19,7 @@ ENV NODE_ENV=production
 
 EXPOSE 9000
 
-# Run migrate + start from inside .medusa/server (cwd matters — this is what was missing)
-CMD ["npm", "run", "start"]
+# Run DB migrations, then start — both from inside .medusa/server (cwd matters).
+# `&&` fails fast if a schema migration errors (never start on a bad schema);
+# `exec` hands signals directly to the Medusa server for clean shutdowns.
+CMD ["sh", "-c", "npx medusa db:migrate && exec npx medusa start"]

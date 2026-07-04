@@ -31,6 +31,20 @@ const hasBkash =
 module.exports = defineConfig({
   projectConfig: {
     databaseUrl: process.env.DATABASE_URL,
+    // Keep the Postgres socket alive. Medusa already forces keepAlive on the
+    // runtime connection, but the DB-MIGRATION connection is built separately and
+    // otherwise defaults to keepAlive:false — behind Docker NAT that idle socket is
+    // dropped mid-migrate and `db:migrate` hangs forever (works locally, hangs in a
+    // container). Applying the same settings here makes migrate-on-start reliable.
+    databaseDriverOptions: {
+      // `as any`: Medusa's type only declares `connection.ssl`, but createPgConnection
+      // and the underlying pg driver also read these keepAlive/timeout keys.
+      connection: {
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10000,
+        connectionTimeoutMillis: 5000,
+      } as any,
+    },
     http: {
       storeCors: process.env.STORE_CORS!,
       adminCors: process.env.ADMIN_CORS!,

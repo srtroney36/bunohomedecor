@@ -48,6 +48,10 @@ export default async function initial_data_seed({
     return;
   }
 
+  // Best-effort demo seed. This runs during `db:migrate`, which the container executes
+  // on startup — a failure here must NOT block boot. Log and return so the migration
+  // script is still marked complete (never re-runs, no duplicate channels/locations).
+  try {
   const countries = ["gb", "de", "dk", "se", "fr", "es", "it"];
 
   logger.info("Seeding store data...");
@@ -851,4 +855,9 @@ export default async function initial_data_seed({
   });
 
   logger.info("Finished seeding inventory levels data.");
+  } catch (e: any) {
+    logger.error(
+      `initial-data-seed did not complete (the store still boots — create region/products in the admin): ${e?.message ?? e}`
+    );
+  }
 }
