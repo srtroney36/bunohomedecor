@@ -51,8 +51,9 @@ npm install
 
 # 2. Configure backend
 cp apps/backend/.env.example apps/backend/.env
-# Edit .env — set DATABASE_URL and generate APP_SECRETS_ENCRYPTION_KEY:
+# Edit .env — set DATABASE_URL, and JWT_SECRET / COOKIE_SECRET:
 #   openssl rand -hex 32
+# Integration secrets (email, SMS, couriers, etc.) are optional env vars — see .env.example.
 
 # 3. Configure storefront
 cp apps/storefront/.env.example apps/storefront/.env.local

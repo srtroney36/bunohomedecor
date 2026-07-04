@@ -34,14 +34,13 @@ adjust for your chosen provider when deploying.
 Copy `.env.example` to `.env` in `apps/backend/` and fill in:
 
 ```bash
-# Generate unique secrets — run each command once and paste the output
-openssl rand -hex 32    # → DATABASE URL password, JWT_SECRET, COOKIE_SECRET
-openssl rand -hex 32    # → APP_SECRETS_ENCRYPTION_KEY  (back this up!)
+# Generate unique secrets — run once each and paste the output
+openssl rand -hex 32    # → JWT_SECRET
+openssl rand -hex 32    # → COOKIE_SECRET
 ```
 
-The `APP_SECRETS_ENCRYPTION_KEY` encrypts all admin-stored credentials (email, SMS,
-couriers, CAPI token, Google OAuth). **If you lose it, every admin-encrypted credential
-must be re-entered.** Store it somewhere safe from day one.
+All integration secrets (email, SMS, couriers, CAPI, Google, payments) are plain
+environment variables — there is **no encryption key** to generate or back up.
 
 ---
 
@@ -305,20 +304,10 @@ Set these in Coolify → your backend app → Environment Variables.
 | `STORE_CORS` | Allowed origins for storefront requests | Your storefront URL, e.g. `https://shop.acmeshop.com` |
 | `ADMIN_CORS` | Allowed origins for admin UI requests | Your backend URL, e.g. `https://api.acmeshop.com` |
 | `AUTH_CORS` | Allowed origins for auth requests | Both URLs comma-separated: `https://api.acmeshop.com,https://shop.acmeshop.com` |
-| `APP_SECRETS_ENCRYPTION_KEY` | AES-256-GCM master key for all admin-encrypted secrets (email, SMS, couriers, CAPI, Google OAuth) | `openssl rand -hex 32` — produces exactly 64 hex chars (32 bytes). **UNIQUE per store. Back it up. Losing it makes all encrypted admin secrets unreadable.** |
 
-> **`APP_SECRETS_ENCRYPTION_KEY` — critical notes**
-> - Generate a **fresh key for every store** with `openssl rand -hex 32`
-> - Store the key in a password manager or secrets vault immediately
-> - If you rotate or lose this key, every credential stored via the admin (email, SMS,
->   couriers, CAPI token, Google OAuth secret) becomes permanently unreadable and must
->   be re-entered
-> - The key must be exactly 64 hexadecimal characters
->
-> **Backward compatibility:** If you have an existing deployment that uses the old name
-> `COURIER_CONFIG_ENCRYPTION_KEY`, you do not need to rename it immediately — the backend
-> accepts either name and logs a deprecation warning when only the old name is found. To
-> silence the warning, rename the variable in Coolify and restart the backend.
+> **No encryption key.** Integration secrets are plain env vars (Section 5b) — there is
+> no `APP_SECRETS_ENCRYPTION_KEY` to set. If an old deployment still has one, it is unused
+> and can be removed.
 
 ### 5b. Backend — OPTIONAL feature vars
 
@@ -338,7 +327,15 @@ Add them only when you are ready to enable that feature.
 | `BKASH_PASSWORD` | bKash | |
 | `BKASH_SANDBOX` | bKash sandbox mode | Default `true`; set to `false` for live |
 | `BACKEND_URL` | Builds payment callback URLs for SSLCommerz/bKash | e.g. `https://api.acmeshop.com` — required when using those providers |
+| `RESEND_API_KEY` | Transactional email (Resend) | With Sending access; from-email/name via `RESEND_FROM_EMAIL`/`RESEND_FROM_NAME` or Store Settings |
 | `STORE_URL` | Used in email templates (logo URL, account links) | e.g. `https://shop.acmeshop.com` — only needed when email is configured |
+| `SMS_API_KEY` | Transactional SMS | Twilio Account SID or gateway key; Twilio also needs `TWILIO_AUTH_TOKEN` |
+| `TWILIO_AUTH_TOKEN` | SMS via Twilio | Twilio only; `SMS_PROVIDER`/`SMS_SENDER_ID`/`SMS_API_URL` also settable in Store Settings |
+| `META_CAPI_ACCESS_TOKEN` | Meta Conversions API (server-side Purchase events) | From Events Manager → Conversions API. Pixel/GA IDs are set in Store Settings |
+| `GOOGLE_CLIENT_SECRET` | Google Sign-In | The secret only; Client ID + redirect URI are set in Store Settings → Authentication |
+| `STEADFAST_API_KEY`, `STEADFAST_SECRET_KEY` | Steadfast courier | No sandbox |
+| `REDX_API_TOKEN` | RedX courier | `REDX_SANDBOX=true` for the sandbox gateway |
+| `PATHAO_CLIENT_ID`, `PATHAO_CLIENT_SECRET`, `PATHAO_USERNAME`, `PATHAO_PASSWORD` | Pathao courier | `PATHAO_STORE_ID` optional; `PATHAO_SANDBOX=true` for sandbox |
 | `S3_FILE_URL` | Public URL prefix for uploaded files | e.g. R2: `https://pub-<hash>.r2.dev`, Garage: `https://garage.acmeshop.com/medusa-store` — all six `S3_*` vars must be set together to activate; local disk used otherwise |
 | `S3_BUCKET` | Bucket name | e.g. `medusa-store` |
 | `S3_ACCESS_KEY_ID` | Access key / token key | From R2 API token or Garage key |
@@ -363,7 +360,7 @@ Add them only when you are ready to enable that feature.
 |----------|---------|-------|
 | `NEXT_PUBLIC_STRIPE_KEY` | Stripe payment UI in checkout | Stripe publishable key (`pk_live_...` or `pk_test_...`) |
 | `NEXT_PUBLIC_GTM_ID` | Google Tag Manager | e.g. `GTM-XXXXXXX` — fires all tags incl. PageView |
-| `NEXT_PUBLIC_META_PIXEL_ID` | Meta Pixel (env-based fallback) | Meta Pixel can also be configured in Admin → Tracking & Analytics at runtime without redeploy |
+| `NEXT_PUBLIC_META_PIXEL_ID` | Meta Pixel (env-based fallback) | Meta Pixel can also be set in Admin → Store Settings → Tracking & Analytics at runtime without redeploy |
 | `NEXT_PUBLIC_TIKTOK_PIXEL_ID` | TikTok Pixel | e.g. `ABCDEFGHIJ` |
 | `NEXT_PUBLIC_GADS_ID` | Google Ads conversion tracking | e.g. `AW-123456789` |
 
@@ -486,7 +483,7 @@ open https://shop.acmeshop.com                # should load the store
 
 4.  Coolify: create Backend app
     → Build Pack: Dockerfile   Base Dir: apps/backend   Port: 9000   Build timeout: 3600
-    → Set REQUIRED env vars (table 5a) incl. a FRESH APP_SECRETS_ENCRYPTION_KEY
+    → Set REQUIRED env vars (table 5a): DATABASE_URL, JWT_SECRET, COOKIE_SECRET, CORS
     → Env vars must be RUNTIME (uncheck "Is Build Time")
     → Set CORS vars to the new store's domains
     → Set all six S3_* vars (table 5b)
@@ -531,7 +528,7 @@ open https://shop.acmeshop.com                # should load the store
 | `/app` shows `Cannot GET /app` in browser but `curl localhost:9000/app` returns 200 | Stale browser cache from earlier failed deploys | Hard-refresh (Ctrl+Shift+R) or open incognito; clear site cache |
 | Env var (e.g. `DATABASE_URL`) missing inside the running container | Var set as **build-time only** in Coolify | Uncheck "Is Build Time" so it's a runtime var; redeploy |
 | Currency (e.g. BDT) not selectable when creating a region | Currency not enabled on the store | Admin → Settings → Store → Currencies → add it first |
-| `Error: Encryption key must be 64 hex characters` | `APP_SECRETS_ENCRYPTION_KEY` missing or wrong length | Generate with `openssl rand -hex 32`; confirm it is exactly 64 chars |
+| A provider card shows "Not configured" after setting its env vars | Backend not restarted, or a required var missing | Env vars are read at startup — restart the backend; confirm all of that provider's required vars are set |
 | Storefront shows `Failed to fetch` or blank page | `NEXT_PUBLIC_MEDUSA_BACKEND_URL` points to wrong host, or CORS blocked | Verify `STORE_CORS` on backend matches storefront URL exactly; check `NEXT_PUBLIC_MEDUSA_BACKEND_URL` on storefront |
 | `Publishable key is invalid` | Key not set or key belongs to a different backend | Re-copy from Admin → Settings → API Keys; set on storefront; redeploy storefront |
 | Admin UI at /app redirects to login loop | `ADMIN_CORS` missing backend's own URL | Add backend URL to `ADMIN_CORS` |

@@ -32,7 +32,6 @@ from your deploy work to what the client sets up themselves in the admin.
     [ ] STORE_CORS = https://shop.acmeshop.com
     [ ] ADMIN_CORS = https://api.acmeshop.com
     [ ] AUTH_CORS = https://api.acmeshop.com,https://shop.acmeshop.com
-    [ ] APP_SECRETS_ENCRYPTION_KEY (openssl rand -hex 32 — BACKED UP in password manager)
     [ ] MEDUSA_ADMIN_ONBOARDING_TYPE = nextjs
 [ ] S3 env vars set on backend (all six together):
     [ ] S3_ENDPOINT   (provider API endpoint)
@@ -71,11 +70,17 @@ from your deploy work to what the client sets up themselves in the admin.
 [ ] COD (Pay on Delivery) available at checkout — no config needed
 ```
 
-### Encryption key backup
+### Integration secrets (only the features this store uses)
 ```
-[ ] APP_SECRETS_ENCRYPTION_KEY value stored in password manager / secrets vault
-    Note: if this key is lost, ALL admin-encrypted credentials (email, SMS, couriers,
-    CAPI, Google OAuth) become permanently unreadable and must be re-entered.
+[ ] Secrets set as backend env vars (restart backend after adding), as needed:
+    [ ] Email:    RESEND_API_KEY (+ STORE_URL)
+    [ ] SMS:      SMS_API_KEY (+ TWILIO_AUTH_TOKEN for Twilio)
+    [ ] Payments: STRIPE_* / SSLCOMMERZ_* / BKASH_* (+ BACKEND_URL)
+    [ ] Couriers: STEADFAST_* / REDX_* / PATHAO_*
+    [ ] Tracking: META_CAPI_ACCESS_TOKEN
+    [ ] Google:   GOOGLE_CLIENT_SECRET
+[ ] Each provider verified in Admin → Store Settings (badge shows "Configured")
+    Note: no encryption key is used — secrets live only in the environment.
 ```
 
 ---
@@ -105,16 +110,15 @@ enter themselves) the credentials.
 |--------------|--------|-------|
 | Store name, colors, fonts, logo | **You** | brand.config.ts + public/ assets (before deploy) |
 | Footer static links | **You** | footer/index.tsx (before deploy) |
-| Encryption key | **You** | Backend env var (at deploy) |
 | Database, CORS, JWT/cookie secrets | **You** | Backend env vars (at deploy) |
-| Payment env vars (Stripe/SSLCommerz/bKash) | **You** (client provides credentials) | Backend env vars (any time, requires redeploy) |
-| Email credentials (Resend) | **Client** (or you on their behalf) | Admin → Notifications → Credentials |
-| SMS credentials | **Client** (or you on their behalf) | Admin → Notifications → Credentials |
-| Courier credentials + activation | **Client** (or you on their behalf) | Admin → Couriers |
-| Meta Pixel ID, GA4 Measurement ID | **Client** (or you) | Admin → Tracking & Analytics |
-| CAPI token | **Client** (or you) | Admin → Tracking & Analytics |
-| Google OAuth client secret | **Client** (or you) | Admin → Authentication |
-| Phone OTP settings | **Client** (or you) | Admin → Authentication |
+| Payment secrets (Stripe/SSLCommerz/bKash) | **You** (client provides credentials) | Backend env vars (restart to apply) |
+| Email secret (`RESEND_API_KEY`) | **You** (client provides) | Backend env var; from-name/toggles in Admin → Store Settings → Notifications |
+| SMS secrets (`SMS_API_KEY`, `TWILIO_AUTH_TOKEN`) | **You** (client provides) | Backend env var; provider/toggles in Store Settings → Notifications |
+| Courier secrets (`STEADFAST_*`/`REDX_*`/`PATHAO_*`) | **You** (client provides) | Backend env var; activation in Store Settings → Couriers |
+| Meta Pixel ID, GA4 Measurement ID | **Client** (or you) | Store Settings → Tracking & Analytics |
+| CAPI token (`META_CAPI_ACCESS_TOKEN`) | **You** (client provides) | Backend env var; enable in Store Settings → Tracking |
+| Google OAuth secret (`GOOGLE_CLIENT_SECRET`) | **You** (client provides) | Backend env var; client ID/redirect in Store Settings → Authentication |
+| Phone OTP settings | **Client** (or you) | Store Settings → Authentication |
 | WhatsApp number, order phone | **Client** | Admin → Store Settings |
 | Homepage sections (hero, banners, etc.) | **Client** | Admin → Homepage |
 | Product catalog (products, categories, collections) | **Client** | Admin → Products / Categories |
@@ -135,12 +139,12 @@ enter themselves) the credentials.
 [ ] Order appears in Admin → Orders
 [ ] Admin login works with the client's credentials (or reset password)
 
-OPTIONAL — test each configured feature:
-[ ] Email — Admin → Notifications → "Send test email" arrives
-[ ] SMS — Admin → Notifications → "Send test SMS" arrives
+OPTIONAL — test each configured feature (all under Admin → Store Settings):
+[ ] Email — Store Settings → Notifications → Email guide → "Send test email" arrives
+[ ] SMS — Store Settings → Notifications → SMS guide → "Send test SMS" arrives
 [ ] Stripe — place a test order with Stripe test card 4242 4242 4242 4242
 [ ] SSLCommerz — place test order in sandbox mode
-[ ] Courier — Admin → Couriers → Test Connection returns success
+[ ] Courier — Store Settings → Couriers → courier guide → Test connection returns success
 [ ] Meta Pixel + CAPI dedup — place a test order with the Test Event Code set; Meta
     Events Manager must show ONE deduplicated Purchase event (browser + server merged),
     NOT two separate events — double-counting is the make-or-break tracking check;

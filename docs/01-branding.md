@@ -160,7 +160,6 @@ Check:
 ```
 
 After deploy, continue with admin content:
-- Admin → Store Settings (WhatsApp number, order phone)
+- Admin → Store Settings (contact buttons + integration cards: Payments, Couriers, Tracking, Auth, Notifications)
 - Admin → Homepage (hero, banners, featured sections)
 - Admin → Product Cards (card style, fields, grid)
-- Admin → Notifications (email/SMS credentials)

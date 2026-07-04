@@ -74,13 +74,12 @@ In `apps/backend/.env`:
 # Local copy of prod data — NOT the live DB
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
 
-# Match production so admin-encrypted secrets (email/SMS/courier/CAPI/OAuth) decrypt locally.
-# Copy the value from the production backend's env. Keep it private.
-APP_SECRETS_ENCRYPTION_KEY=<same-as-production>
-
 # Local secrets can be anything for dev
 JWT_SECRET=devsecret
 COOKIE_SECRET=devsecret
+
+# Integration secrets (email/SMS/courier/CAPI/Google) are plain env vars — set only
+# the ones you need to exercise locally, e.g. RESEND_API_KEY. There is no encryption key.
 
 STORE_CORS=http://localhost:8000
 ADMIN_CORS=http://localhost:9000
