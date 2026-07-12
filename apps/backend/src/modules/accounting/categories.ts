@@ -1,0 +1,164 @@
+/**
+ * Cash categories, classified. This file is the spec — the backend math, the validators
+ * and the admin UI all derive from it. Read this before changing anything in accounting.
+ *
+ * ---------------------------------------------------------------------------------
+ * RULE 1: The ledger records only what Medusa cannot see.
+ * ---------------------------------------------------------------------------------
+ *
+ * Medusa already knows revenue, COGS, the cash customers handed over, refunds it
+ * processed, and how much stock is on the shelf. None of that is journaled here.
+ * Writing a customer payment into this ledger would count the same taka twice: once
+ * when Medusa recorded the order, once when someone typed it in.
+ *
+ * This ledger owns the money movements Medusa has no idea about: partner capital,
+ * drawings, restock payments to suppliers, fixed assets, ad spend, courier fees.
+ *
+ * ---------------------------------------------------------------------------------
+ * RULE 2: Most cash movements are NOT expenses.
+ * ---------------------------------------------------------------------------------
+ *
+ * Restocking 50,000 of inventory is a cash -> asset swap. The money became vases; it
+ * did not evaporate. It only hits profit later, as COGS, when a vase actually sells.
+ * Same for fixed assets (capitalised) and partner capital (equity).
+ *
+ * Sum `direction = 'out'` naively and the dashboard reports a catastrophic loss every
+ * single time you restock. Hence this classifier, which every aggregate query uses.
+ */
+
+export const LEDGER_CATEGORIES = [
+  // Equity: partner money in and out. Never profit, never loss.
+  "capital_contribution",
+  "partner_drawing",
+
+  // Assets: cash converted into something you still own. Not an expense.
+  "inventory_purchase",
+  "fixed_asset",
+
+  // Real P&L expenses: money that is simply gone.
+  "marketing",
+  "courier_fee",
+  "other_expense",
+  "refund",
+] as const
+
+export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number]
+
+/** equity = owner money. asset = cash became a thing you own. expense = the only class that hits P&L. */
+export type LedgerClass = "equity" | "asset" | "expense"
+
+export type CategoryMeta = {
+  label: string
+  klass: LedgerClass
+  /** The ONLY direction this category may move. A capital contribution is always money in. */
+  direction: "in" | "out"
+  /** Rendered as helper text in the admin. This is where the rules above get taught. */
+  help: string
+}
+
+export const CATEGORY_META: Record<LedgerCategory, CategoryMeta> = {
+  capital_contribution: {
+    label: "Capital contribution",
+    klass: "equity",
+    direction: "in",
+    help: "A partner put money into the business. Equity — not income, and not profit.",
+  },
+  partner_drawing: {
+    label: "Partner drawing",
+    klass: "equity",
+    direction: "out",
+    help: "A partner took money out. Equity — not an expense, and it does not reduce profit.",
+  },
+  inventory_purchase: {
+    label: "Inventory purchase (restock)",
+    klass: "asset",
+    direction: "out",
+    help: "Cash became goods. NOT an expense — it becomes COGS only when the item actually sells.",
+  },
+  fixed_asset: {
+    label: "Fixed asset purchase",
+    klass: "asset",
+    direction: "out",
+    help: "Capitalised — you still own it. NOT an expense. Add these from the Fixed Assets tab.",
+  },
+  marketing: {
+    label: "Marketing / ads",
+    klass: "expense",
+    direction: "out",
+    help: "A real expense: the money is gone. Add these from the Marketing tab.",
+  },
+  courier_fee: {
+    label: "Courier fee",
+    klass: "expense",
+    direction: "out",
+    help: "Paid to Pathao/Steadfast/RedX. A real expense — Medusa does not record what delivery costs you.",
+  },
+  other_expense: {
+    label: "Other expense",
+    klass: "expense",
+    direction: "out",
+    help: "Rent, utilities, salaries, packaging. A real expense.",
+  },
+  refund: {
+    label: "Refund (outside Medusa only)",
+    klass: "expense",
+    direction: "out",
+    help:
+      "ONLY for cash you refunded outside Medusa. A return recorded in Medusa has already been " +
+      "netted out of revenue and cash — journaling it here as well subtracts it twice.",
+  },
+}
+
+export const EQUITY_CATEGORIES = LEDGER_CATEGORIES.filter(
+  (c) => CATEGORY_META[c].klass === "equity"
+)
+
+export const ASSET_CATEGORIES = LEDGER_CATEGORIES.filter(
+  (c) => CATEGORY_META[c].klass === "asset"
+)
+
+/** The only categories that reduce net profit. */
+export const PNL_EXPENSE_CATEGORIES = LEDGER_CATEGORIES.filter(
+  (c) => CATEGORY_META[c].klass === "expense"
+)
+
+/** Categories that require a partner to be named. */
+export const PARTNER_REQUIRED_CATEGORIES = EQUITY_CATEGORIES
+
+/**
+ * Categories owned by a register table (Fixed Assets / Marketing), which writes its own
+ * mirrored ledger row. Typing one straight into the Cash Book would drift the ledger away
+ * from the register, so the workflow rejects it.
+ */
+export const REGISTER_OWNED_CATEGORIES: LedgerCategory[] = ["fixed_asset", "marketing"]
+
+export const LEDGER_SOURCE_TYPES = ["manual", "fixed_asset", "marketing_spend"] as const
+export type LedgerSourceType = (typeof LEDGER_SOURCE_TYPES)[number]
+
+export const MARKETING_PLATFORMS = [
+  "facebook",
+  "instagram",
+  "google",
+  "tiktok",
+  "influencer",
+  "other",
+] as const
+export type MarketingPlatform = (typeof MARKETING_PLATFORMS)[number]
+
+export const MARKETING_PLATFORM_LABELS: Record<MarketingPlatform, string> = {
+  facebook: "Facebook",
+  instagram: "Instagram",
+  google: "Google",
+  tiktok: "TikTok",
+  influencer: "Influencer",
+  other: "Other",
+}
+
+export const FIXED_ASSET_CATEGORIES = [
+  "equipment",
+  "furniture",
+  "electronics",
+  "tools",
+  "other",
+] as const
+export type FixedAssetCategory = (typeof FIXED_ASSET_CATEGORIES)[number]

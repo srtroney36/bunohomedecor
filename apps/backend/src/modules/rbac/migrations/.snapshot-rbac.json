@@ -22,8 +22,8 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "variant_id": {
-          "name": "variant_id",
+        "name": {
+          "name": "name",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -38,9 +38,9 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "cost": {
-          "name": "cost",
-          "type": "numeric",
+        "slug": {
+          "name": "slug",
+          "type": "text",
           "unsigned": false,
           "autoincrement": false,
           "primary": false,
@@ -49,13 +49,13 @@
           "length": null,
           "precision": null,
           "scale": null,
-          "default": "0",
+          "default": null,
           "comment": null,
           "enumItems": [],
-          "mappedType": "decimal"
+          "mappedType": "text"
         },
-        "currency_code": {
-          "name": "currency_code",
+        "description": {
+          "name": "description",
           "type": "text",
           "unsigned": false,
           "autoincrement": false,
@@ -70,8 +70,24 @@
           "enumItems": [],
           "mappedType": "text"
         },
-        "raw_cost": {
-          "name": "raw_cost",
+        "is_system": {
+          "name": "is_system",
+          "type": "boolean",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "false",
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "boolean"
+        },
+        "permissions": {
+          "name": "permissions",
           "type": "jsonb",
           "unsigned": false,
           "autoincrement": false,
@@ -81,7 +97,23 @@
           "length": null,
           "precision": null,
           "scale": null,
-          "default": "'{\"value\":\"0\",\"precision\":20}'",
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
           "comment": null,
           "enumItems": [],
           "mappedType": "json"
@@ -135,29 +167,29 @@
           "mappedType": "datetime"
         }
       },
-      "name": "variant_cost",
+      "name": "role",
       "schema": "public",
       "indexes": [
         {
-          "keyName": "IDX_variant_cost_variant_id_unique",
+          "keyName": "IDX_role_slug_unique",
           "columnNames": [],
           "composite": false,
           "constraint": false,
           "primary": false,
           "unique": false,
-          "expression": "CREATE UNIQUE INDEX IF NOT EXISTS \"IDX_variant_cost_variant_id_unique\" ON \"variant_cost\" (\"variant_id\") WHERE deleted_at IS NULL"
+          "expression": "CREATE UNIQUE INDEX IF NOT EXISTS \"IDX_role_slug_unique\" ON \"role\" (\"slug\") WHERE deleted_at IS NULL"
         },
         {
-          "keyName": "IDX_variant_cost_deleted_at",
+          "keyName": "IDX_role_deleted_at",
           "columnNames": [],
           "composite": false,
           "constraint": false,
           "primary": false,
           "unique": false,
-          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_variant_cost_deleted_at\" ON \"variant_cost\" (\"deleted_at\") WHERE deleted_at IS NULL"
+          "expression": "CREATE INDEX IF NOT EXISTS \"IDX_role_deleted_at\" ON \"role\" (\"deleted_at\") WHERE deleted_at IS NULL"
         },
         {
-          "keyName": "variant_cost_pkey",
+          "keyName": "role_pkey",
           "columnNames": [
             "id"
           ],

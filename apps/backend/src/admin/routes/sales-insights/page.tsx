@@ -37,6 +37,14 @@ type Insights = {
     avg_order_value: number
     returned_orders: number
     returned_value: number
+    // Operating expenses from the accounting ledger, and the net profit they produce.
+    marketing_spend: number
+    courier_cost: number
+    other_expenses: number
+    refunds: number
+    operating_expenses: number
+    net_profit: number
+    net_margin_pct: number
   }
 }
 
@@ -204,11 +212,34 @@ const SalesInsightsPage = () => {
               <Kpi
                 label="Gross profit"
                 value={money(m.gross_profit, cur)}
-                hint={`${m.margin_pct.toFixed(1)}% margin`}
+                hint={`${m.margin_pct.toFixed(1)}% margin — revenue less COGS`}
                 accent={m.gross_profit >= 0 ? "green" : "red"}
               />
+              <Kpi
+                label="Net profit"
+                value={money(m.net_profit, cur)}
+                hint={`${m.net_margin_pct.toFixed(1)}% — after marketing & expenses`}
+                accent={m.net_profit >= 0 ? "green" : "red"}
+              />
+              <Kpi
+                label="Operating expenses"
+                value={money(m.operating_expenses, cur)}
+                hint="from the Cash Book, this period"
+                accent="red"
+              />
+            </div>
+
+            {/* Revenue / cost / expense breakdown */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <Kpi label="Product revenue" value={money(m.product_revenue, cur)} hint="items only (excl. shipping)" />
               <Kpi label="Cost of goods (COGS)" value={money(m.cogs, cur)} />
+              <Kpi label="Marketing / ads" value={money(m.marketing_spend, cur)} accent="red" />
+              <Kpi
+                label="Courier + other"
+                value={money(m.courier_cost + m.other_expenses + m.refunds, cur)}
+                hint="courier, refunds, other expenses"
+                accent="red"
+              />
             </div>
 
             {/* COD + delivery */}
