@@ -20,6 +20,8 @@ import {
   createStockMovementStep,
   deleteBatchStep,
   editBatchStep,
+  planHardAdjustStep,
+  setStockLevelStep,
   type EditBatchInput,
 } from "./steps/stock-adjust"
 import {
@@ -179,6 +181,78 @@ export const adjustStockWorkflow = createWorkflow(
       direction: input.direction,
     }))
     return new WorkflowResponse(result)
+  }
+)
+
+/* --------------------------------- hard adjust ------------------------------------- */
+
+export type ReconcileStockInput = {
+  variant_id: string
+  /** The true count. Both physical stock AND batch-backed stock are pulled onto this. */
+  target_qty: number
+  /** Required when the target is ABOVE batch-backed stock — the new layer's cost per unit. */
+  unit_cost?: number
+  reason?: "shrinkage" | "damage" | "correction"
+  date?: Date
+  note?: string | null
+}
+
+/**
+ * HARD ADJUST — "the real count is N".
+ *
+ * This is the sanctioned replacement for typing into Medusa's native stock box (which
+ * inventory-stock-guard.ts now refuses). It never just moves the number: the difference is
+ * booked the honest way — extra units become a costed `found` layer, missing units become a
+ * write-off at FIFO cost — and THEN the physical quantity is set to the target.
+ *
+ * Because the delta is measured against batch-backed stock, this also heals any drift that
+ * already existed: afterwards physical == batch-backed == target.
+ */
+export const reconcileStockWorkflow = createWorkflow(
+  "reconcile-stock",
+  function (input: ReconcileStockInput) {
+    // Reads the position, computes the delta, and rejects an uncosted increase.
+    const plan = planHardAdjustStep({
+      variant_id: input.variant_id,
+      target_qty: input.target_qty,
+      unit_cost: input.unit_cost,
+    })
+
+    when({ plan }, ({ plan }) => plan.delta > 0).then(() => {
+      const batchInput = transform({ input, plan }, ({ input, plan }) => ({
+        variant_id: input.variant_id,
+        inventory_item_id: plan.item_id,
+        received_date: input.date ?? new Date(),
+        qty_received: plan.delta,
+        unit_cost: Number(input.unit_cost),
+        freight_total: 0,
+        landed_unit_cost: Number(input.unit_cost),
+        source: "found" as const,
+        note: input.note ?? `Hard adjust: counted ${plan.target}`,
+        ledger_entry_id: null,
+      }))
+      createStockBatchStep(batchInput)
+    })
+
+    when({ plan }, ({ plan }) => plan.delta < 0).then(() => {
+      const movementInput = transform({ input, plan }, ({ input, plan }) => ({
+        variant_id: input.variant_id,
+        date: input.date ?? new Date(),
+        quantity: Math.abs(plan.delta),
+        reason: input.reason ?? ("correction" as const),
+        note: input.note ?? `Hard adjust: counted ${plan.target}`,
+      }))
+      createStockMovementStep(movementInput)
+    })
+
+    // Land the physical number on the target last, so a failure above rolls back first.
+    const setInput = transform({ input, plan }, ({ input, plan }) => ({
+      variant_id: input.variant_id,
+      target_qty: plan.target,
+    }))
+    setStockLevelStep(setInput)
+
+    return new WorkflowResponse(plan)
   }
 )
 

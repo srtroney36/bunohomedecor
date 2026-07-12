@@ -159,6 +159,22 @@ export const AdjustStockSchema = z
   .strict()
 export type AdjustStockSchema = z.infer<typeof AdjustStockSchema>
 
+/**
+ * Hard adjust — "the real count is N". `unit_cost` is only required when the target is ABOVE
+ * batch-backed stock; the workflow enforces that, because only it knows the delta.
+ */
+export const HardAdjustSchema = z
+  .object({
+    variant_id: z.string().min(1),
+    target_qty: z.coerce.number().int().min(0),
+    unit_cost: z.coerce.number().finite().min(0).optional(),
+    reason: z.enum(["shrinkage", "damage", "correction"]).optional(),
+    date: D.optional(),
+    note: z.string().max(500).nullish(),
+  })
+  .strict()
+export type HardAdjustSchema = z.infer<typeof HardAdjustSchema>
+
 /** Edit a batch. Every field optional — omitted fields keep their current value. */
 export const EditBatchSchema = z
   .object({

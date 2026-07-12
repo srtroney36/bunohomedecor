@@ -33,6 +33,11 @@ export const accountingMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     middlewares: [validateAndTransformBody(V.AdjustStockSchema)],
   },
+  {
+    matcher: "/admin/accounting/hard-adjust",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(V.HardAdjustSchema)],
+  },
 
   // ledger
   {

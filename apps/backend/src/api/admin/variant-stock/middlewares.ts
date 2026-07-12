@@ -7,7 +7,9 @@ import {
 import {
   AdjustStockSchema,
   EditBatchSchema,
+  GetByInventoryItemSchema,
   GetVariantStockSchema,
+  HardAdjustSchema,
   RestockSchema,
 } from "./validators"
 
@@ -38,5 +40,15 @@ export const variantStockMiddlewares: MiddlewareRoute[] = [
     matcher: "/admin/variant-stock/batches/:id",
     method: ["POST"],
     middlewares: [validateAndTransformBody(EditBatchSchema)],
+  },
+  {
+    matcher: "/admin/variant-stock/hard-adjust",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(HardAdjustSchema)],
+  },
+  {
+    matcher: "/admin/variant-stock/by-inventory-item",
+    method: ["GET"],
+    middlewares: [validateAndTransformQuery(GetByInventoryItemSchema, {})],
   },
 ]

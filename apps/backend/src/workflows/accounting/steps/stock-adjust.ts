@@ -7,6 +7,7 @@ import {
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 
 import { computeFifoCosting } from "../../../lib/insights/fifo-costing"
+import { planHardAdjust } from "../../../lib/insights/hard-adjust"
 import { ACCOUNTING_MODULE } from "../../../modules/accounting"
 import { PRODUCT_COST_MODULE } from "../../../modules/productCost"
 
@@ -130,6 +131,114 @@ export const adjustStockLevelStep = createStep(
     const inventory: any = container.resolve(Modules.INVENTORY)
     await inventory.updateInventoryLevels([
       { inventory_item_id: comp.item_id, location_id: comp.location_id, stocked_quantity: comp.before },
+    ])
+  }
+)
+
+/* --------------------------------- hard adjust ------------------------------------- */
+
+/**
+ * Work out what a "set stock to N" actually means, and refuse the one version of it that
+ * would corrupt the books.
+ *
+ * The delta is measured against BATCH-BACKED stock (Σ remaining), not Medusa's physical
+ * number — so if the two have already drifted apart, a hard adjust pulls BOTH onto the target
+ * and the drift is gone. That is what makes this the reconciler as well as the editor.
+ *
+ * Increasing requires a cost per unit: those units become a new cost layer, and a layer
+ * valued at zero would understate COGS on every future sale that draws from it — precisely
+ * the failure batch costing exists to prevent.
+ */
+export type PlanHardAdjustInput = {
+  variant_id: string
+  target_qty: number
+  unit_cost?: number
+}
+
+export const planHardAdjustStep = createStep(
+  "plan-hard-adjust",
+  async (input: PlanHardAdjustInput, { container }: { container: MedusaContainer }) => {
+    const inv = await loadVariantInventory(container, input.variant_id)
+
+    const fifo = await computeFifoCosting(container)
+    const fifoRemaining = fifo.per_batch
+      .filter((b) => b.variant_id === input.variant_id)
+      .reduce((s, b) => s + b.remaining, 0)
+
+    const { target, delta, error } = planHardAdjust(
+      input.target_qty,
+      fifoRemaining,
+      input.unit_cost
+    )
+    if (error) {
+      throw new MedusaError(MedusaError.Types.INVALID_DATA, error)
+    }
+
+    return new StepResponse({
+      target,
+      delta,
+      fifo_remaining: fifoRemaining,
+      physical_qty: inv.before,
+      item_id: inv.itemId,
+      label: inv.label,
+    })
+  }
+)
+
+/**
+ * Set a variant's stock to an ABSOLUTE quantity (adjustStockLevelStep applies a delta; this
+ * lands on a number). Compensation restores the exact prior quantity.
+ */
+export type SetStockLevelInput = { variant_id: string; target_qty: number }
+type SetComp = { item_id: string; location_id: string; before: number } | null
+
+export const setStockLevelStep = createStep(
+  "set-stock-level",
+  async (input: SetStockLevelInput, { container }: { container: MedusaContainer }) => {
+    const inv = await loadVariantInventory(container, input.variant_id)
+    const target = Math.max(0, Number(input.target_qty))
+    let locationId = inv.locationId
+
+    // No level yet: nothing to zero out, but a positive target needs one.
+    if (!locationId) {
+      if (target === 0) {
+        return new StepResponse<{ before: number; after: number; item_id: string }, SetComp>(
+          { before: 0, after: 0, item_id: inv.itemId },
+          null
+        )
+      }
+      const stockLocation: any = container.resolve(Modules.STOCK_LOCATION)
+      const locs = await stockLocation.listStockLocations({}, { take: 1 })
+      locationId = locs?.[0]?.id
+      if (!locationId) {
+        throw new MedusaError(
+          MedusaError.Types.INVALID_DATA,
+          "No stock location is configured. Create one in Settings first."
+        )
+      }
+      await inv.inventory.createInventoryLevels([
+        { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: 0 },
+      ])
+    }
+
+    await inv.inventory.updateInventoryLevels([
+      { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: target },
+    ])
+
+    return new StepResponse<{ before: number; after: number; item_id: string }, SetComp>(
+      { before: inv.before, after: target, item_id: inv.itemId },
+      { item_id: inv.itemId, location_id: locationId, before: inv.before }
+    )
+  },
+  async (comp: SetComp, { container }) => {
+    if (!comp) return
+    const inventory: any = container.resolve(Modules.INVENTORY)
+    await inventory.updateInventoryLevels([
+      {
+        inventory_item_id: comp.item_id,
+        location_id: comp.location_id,
+        stocked_quantity: comp.before,
+      },
     ])
   }
 )

@@ -61,6 +61,16 @@ export const stockApi = {
     adminFetch(`/variant-stock/restock`, { method: "POST", body: JSON.stringify(body) }),
   adjust: (body: unknown) =>
     adminFetch(`/variant-stock/adjust`, { method: "POST", body: JSON.stringify(body) }),
+  hardAdjust: (body: unknown) =>
+    adminFetch(`/variant-stock/hard-adjust`, { method: "POST", body: JSON.stringify(body) }),
+  byInventoryItem: (inventoryItemId: string) =>
+    adminFetch<{
+      variant_id: string
+      label: string
+      sku: string | null
+      product_id: string | null
+      product_title: string | null
+    }>(`/variant-stock/by-inventory-item?inventory_item_id=${encodeURIComponent(inventoryItemId)}`),
   editBatch: (id: string, body: unknown) =>
     adminFetch(`/variant-stock/batches/${id}`, { method: "POST", body: JSON.stringify(body) }),
   deleteBatch: (id: string) =>

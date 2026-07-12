@@ -2,8 +2,10 @@ import {
   Badge,
   Button,
   DatePicker,
+  Drawer,
   Input,
   Label,
+  Prompt,
   Select,
   Table,
   Text,
@@ -18,6 +20,187 @@ import { BatchActions } from "../routes/accounting/sections/batch-actions"
 import { stockApi } from "../lib/stock-api"
 
 type Mode = "restock" | "found" | "shrinkage"
+type Reason = "shrinkage" | "damage" | "correction"
+
+/**
+ * HARD ADJUST — "the real count is N". The sanctioned replacement for typing into Medusa's
+ * native stock box (which the server now refuses).
+ *
+ * The delta is measured against BATCH-BACKED stock, not the shelf number, so this also heals
+ * drift: afterwards on-shelf == batch-backed == target. Increasing demands a cost, because
+ * those units become a cost layer.
+ */
+function HardAdjust({
+  variantId,
+  currentQty,
+  batchBacked,
+  lastCost,
+  cur,
+  onDone,
+}: {
+  variantId: string
+  currentQty: number
+  batchBacked: number
+  lastCost: number
+  cur: string
+  onDone: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [target, setTarget] = useState(String(currentQty))
+  const [cost, setCost] = useState(lastCost > 0 ? String(lastCost) : "")
+  const [reason, setReason] = useState<Reason>("correction")
+  const [note, setNote] = useState("")
+
+  const targetNum = Math.max(0, Number(target) || 0)
+  const costNum = Number(cost) || 0
+  const delta = targetNum - batchBacked
+  const valid = delta > 0 ? costNum > 0 : true
+
+  const run = useMutation({
+    mutationFn: () =>
+      stockApi.hardAdjust({
+        variant_id: variantId,
+        target_qty: targetNum,
+        ...(delta > 0 ? { unit_cost: costNum } : {}),
+        ...(delta < 0 ? { reason } : {}),
+        note: note || null,
+      }),
+    onSuccess: () => {
+      toast.success("Stock reconciled — shelf and books now agree")
+      setConfirmOpen(false)
+      setNote("")
+      onDone()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const summary =
+    delta > 0
+      ? `${delta} extra unit(s) become a new cost layer at ${money(costNum, cur)}/unit. No cash moves.`
+      : delta < 0
+        ? `${Math.abs(delta)} unit(s) are written off at FIFO cost (${reason}). This reduces profit. No cash moves.`
+        : "The books already say this. Only the on-shelf number is corrected."
+
+  return (
+    <>
+      <Button
+        size="small"
+        variant="secondary"
+        onClick={() => {
+          setTarget(String(currentQty))
+          setCost(lastCost > 0 ? String(lastCost) : "")
+          setOpen(true)
+        }}
+      >
+        Hard adjust…
+      </Button>
+
+      <Drawer open={open} onOpenChange={setOpen}>
+        <Drawer.Content>
+          <Drawer.Header>
+            <Drawer.Title>Hard adjust stock</Drawer.Title>
+          </Drawer.Header>
+          <Drawer.Body className="flex flex-col gap-y-4">
+            <div className="rounded-lg bg-ui-bg-subtle p-3">
+              <Text size="small" className="text-ui-fg-subtle">
+                On shelf now: <b>{currentQty}</b> · Backed by batches: <b>{batchBacked}</b>
+              </Text>
+              {currentQty !== batchBacked && (
+                <Text size="xsmall" className="text-ui-fg-error mt-1">
+                  These disagree. Setting the true count will bring both into line.
+                </Text>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-y-1">
+              <Label size="small">True count (set stock to)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              />
+            </div>
+
+            {delta > 0 && (
+              <div className="flex flex-col gap-y-1">
+                <Label size="small">Cost per unit for the {delta} extra (BDT)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  placeholder="0"
+                />
+                <Text size="xsmall" className="text-ui-fg-muted">
+                  Required — these units become a cost layer. A layer worth zero would
+                  understate COGS on every sale that draws from it.
+                </Text>
+              </div>
+            )}
+
+            {delta < 0 && (
+              <div className="flex flex-col gap-y-1">
+                <Label size="small">Reason for the {Math.abs(delta)} missing</Label>
+                <Select value={reason} onValueChange={(v) => setReason(v as Reason)}>
+                  <Select.Trigger>
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="correction">Count correction</Select.Item>
+                    <Select.Item value="shrinkage">Shrinkage / lost</Select.Item>
+                    <Select.Item value="damage">Damaged</Select.Item>
+                  </Select.Content>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-y-1">
+              <Label size="small">Note (optional)</Label>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+
+            <Text size="small" className="text-ui-fg-subtle">
+              {summary}
+            </Text>
+          </Drawer.Body>
+          <Drawer.Footer>
+            <Drawer.Close asChild>
+              <Button variant="secondary">Cancel</Button>
+            </Drawer.Close>
+            <Button
+              disabled={!valid}
+              onClick={() => {
+                setOpen(false)
+                setConfirmOpen(true)
+              }}
+            >
+              Review
+            </Button>
+          </Drawer.Footer>
+        </Drawer.Content>
+      </Drawer>
+
+      <Prompt open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <Prompt.Content>
+          <Prompt.Header>
+            <Prompt.Title>Set stock to {targetNum}?</Prompt.Title>
+            <Prompt.Description>
+              On shelf {currentQty} → {targetNum}. Books {batchBacked} → {targetNum}. {summary}
+            </Prompt.Description>
+          </Prompt.Header>
+          <Prompt.Footer>
+            <Prompt.Cancel>Cancel</Prompt.Cancel>
+            <Prompt.Action onClick={() => run.mutate()}>Confirm</Prompt.Action>
+          </Prompt.Footer>
+        </Prompt.Content>
+      </Prompt>
+    </>
+  )
+}
 
 /**
  * The per-variant stock panel shown on the product page: current quantity, a restock / found /
@@ -114,16 +297,47 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
   const batches = stock?.batches ?? []
   const movements = stock?.movements ?? []
 
+  // What the shelf says vs what cost layers actually back. These must agree; if they don't,
+  // inventory value is understated and a Hard adjust is the way to reconcile.
+  const currentQty = stock?.current_qty ?? 0
+  const batchBacked = batches.reduce((s, b) => s + b.remaining, 0)
+  const drift = currentQty - batchBacked
+
   return (
     <div className="flex flex-col gap-y-3 rounded-lg border border-ui-border-base p-3">
       <div className="flex items-center justify-between">
         <Text size="small" weight="plus">
           Stock
         </Text>
-        <Badge size="2xsmall" color={stock && stock.current_qty > 0 ? "green" : "grey"}>
-          {isLoading ? "…" : `${stock?.current_qty ?? 0} on shelf`}
-        </Badge>
+        <div className="flex items-center gap-x-2">
+          <Badge size="2xsmall" color={currentQty > 0 ? "green" : "grey"}>
+            {isLoading ? "…" : `${currentQty} on shelf`}
+          </Badge>
+          {!isLoading && (
+            <HardAdjust
+              variantId={variantId}
+              currentQty={currentQty}
+              batchBacked={batchBacked}
+              lastCost={stock?.latest_cost ?? 0}
+              cur={cur}
+              onDone={invalidate}
+            />
+          )}
+        </div>
       </div>
+
+      {!isLoading && drift !== 0 && (
+        <div className="rounded-lg border border-ui-border-error bg-ui-bg-subtle p-2">
+          <Text size="xsmall" className="text-ui-fg-error">
+            <b>Out of sync.</b> The shelf says {currentQty} but only {batchBacked} unit(s) are
+            backed by cost batches
+            {drift > 0
+              ? ` — ${drift} unit(s) have no cost, so inventory value is understated.`
+              : ` — ${Math.abs(drift)} costed unit(s) aren't on the shelf.`}{" "}
+            Use Hard adjust to reconcile.
+          </Text>
+        </div>
+      )}
 
       {/* mode toggle */}
       <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { defineMiddlewares, validateAndTransformBody } from "@medusajs/framework
 import multer from "multer"
 import { accountingMiddlewares } from "./admin/accounting/middlewares"
 import { variantStockMiddlewares } from "./admin/variant-stock/middlewares"
+import { inventoryStockGuard } from "./inventory-stock-guard"
 import { rbacGuard } from "./rbac-guard"
 import {
   CreateRoleSchema,
@@ -17,6 +18,31 @@ export default defineMiddlewares([
   {
     matcher: "/admin/*",
     middlewares: [rbacGuard],
+  },
+  /**
+   * Stock quantity is owned by the FIFO batch system — these block the native editors from
+   * writing `stocked_quantity` straight through Medusa's core API. Attaching/detaching a
+   * location still works; only the quantity is refused. See inventory-stock-guard.ts.
+   */
+  {
+    method: ["POST"],
+    matcher: "/admin/inventory-items/location-levels/batch",
+    middlewares: [inventoryStockGuard],
+  },
+  {
+    method: ["POST"],
+    matcher: "/admin/inventory-items/:id/location-levels",
+    middlewares: [inventoryStockGuard],
+  },
+  {
+    method: ["POST"],
+    matcher: "/admin/inventory-items/:id/location-levels/batch",
+    middlewares: [inventoryStockGuard],
+  },
+  {
+    method: ["POST"],
+    matcher: "/admin/inventory-items/:id/location-levels/:location_id",
+    middlewares: [inventoryStockGuard],
   },
   // Multer parses multipart/form-data for the image upload endpoints.
   {
