@@ -33,6 +33,7 @@ export const LEDGER_CATEGORIES = [
 
   // Assets: cash converted into something you still own. Not an expense.
   "inventory_purchase",
+  "packaging_purchase",
   "fixed_asset",
 
   // Real P&L expenses: money that is simply gone.
@@ -74,6 +75,14 @@ export const CATEGORY_META: Record<LedgerCategory, CategoryMeta> = {
     klass: "asset",
     direction: "out",
     help: "Cash became goods. NOT an expense — it becomes COGS only when the item actually sells.",
+  },
+  packaging_purchase: {
+    label: "Packaging purchase (tops up the pool)",
+    klass: "asset",
+    direction: "out",
+    help:
+      "Cash became boxes, tape and bubble wrap. NOT an expense — it becomes a cost only as " +
+      "orders draw their packaging preset out of the pool.",
   },
   fixed_asset: {
     label: "Fixed asset purchase",
@@ -126,13 +135,35 @@ export const PNL_EXPENSE_CATEGORIES = LEDGER_CATEGORIES.filter(
 export const PARTNER_REQUIRED_CATEGORIES = EQUITY_CATEGORIES
 
 /**
- * Categories owned by a register table (Fixed Assets / Marketing), which writes its own
- * mirrored ledger row. Typing one straight into the Cash Book would drift the ledger away
- * from the register, so the workflow rejects it.
+ * Categories that must NOT be hand-entered in the Cash Book, because a dedicated flow owns
+ * them and writes the cash row itself. Typing one straight into the Cash Book would drift
+ * the ledger away from what actually happened, so the create step rejects it.
+ *
+ *   fixed_asset        -> Fixed Assets tab
+ *   marketing          -> Marketing tab
+ *   inventory_purchase -> Restock tab (which also raises the stock)
  */
-export const REGISTER_OWNED_CATEGORIES: LedgerCategory[] = ["fixed_asset", "marketing"]
+export const REGISTER_OWNED_CATEGORIES: LedgerCategory[] = [
+  "fixed_asset",
+  "marketing",
+  "inventory_purchase",
+]
 
-export const LEDGER_SOURCE_TYPES = ["manual", "fixed_asset", "marketing_spend"] as const
+/** Where each restricted category is actually created — used in the rejection message. */
+export const CATEGORY_ENTRY_POINT: Partial<Record<LedgerCategory, string>> = {
+  fixed_asset: "the Fixed Assets tab",
+  marketing: "the Marketing tab",
+  inventory_purchase: "the Restock tab",
+}
+
+export const LEDGER_SOURCE_TYPES = [
+  "manual",
+  "fixed_asset",
+  "marketing_spend",
+  // A restock: cash paired with a real stock increase. Protected from casual deletion so
+  // the cash and the stock can't drift apart.
+  "restock",
+] as const
 export type LedgerSourceType = (typeof LEDGER_SOURCE_TYPES)[number]
 
 export const MARKETING_PLATFORMS = [

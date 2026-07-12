@@ -107,7 +107,9 @@ export type Dashboard = {
     fixed_assets_value: number
     cash_on_hand: number
     cod_receivables: number
+    packaging_pool: number
   }
+  packaging: { bought: number; used: number; pool: number }
   equity: {
     capital_contributed: number
     partner_drawings: number
@@ -131,6 +133,7 @@ export type Dashboard = {
     courier_fee: number
     other_expense: number
     refund: number
+    packaging_used: number
     operating_expenses: number
     net_profit: number
     net_margin_pct: number
@@ -177,6 +180,13 @@ export const api = {
     rbacFetch(`/accounting/fixed-assets/${id}`, { method: "POST", body: JSON.stringify(body) }),
   deleteFixedAsset: (id: string) =>
     rbacFetch(`/accounting/fixed-assets/${id}`, { method: "DELETE" }),
+
+  variants: (q: string) =>
+    rbacFetch<{ variants: { variant_id: string; label: string; sku: string | null; cost: number }[] }>(
+      `/accounting/variants${q ? `?q=${encodeURIComponent(q)}` : ""}`
+    ),
+  restock: (body: unknown) =>
+    rbacFetch(`/accounting/restock`, { method: "POST", body: JSON.stringify(body) }),
 
   marketing: (params: Record<string, string | number | undefined> = {}) => {
     const q = new URLSearchParams()

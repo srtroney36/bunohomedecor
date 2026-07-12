@@ -37,7 +37,11 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   )
   const exp = pnlExpenses(rows)
 
-  const netProfit = base.metrics.gross_profit - exp.total
+  // Packaging consumed by orders in the range is a real cost, derived from orders (not the
+  // ledger), so it is added on top of the ledger expenses.
+  const packagingUsed = base.metrics.packaging_used
+  const operatingExpenses = exp.total + packagingUsed
+  const netProfit = base.metrics.gross_profit - operatingExpenses
 
   res.json({
     range: { from: from.toISOString(), to: to.toISOString() },
@@ -48,12 +52,13 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
     metrics: {
       ...base.metrics,
 
-      // Operating expenses, from the accounting ledger.
+      // Operating expenses: from the accounting ledger, plus packaging drawn from the pool.
       marketing_spend: exp.marketing,
       courier_cost: exp.courier_fee,
       other_expenses: exp.other_expense,
       refunds: exp.refund,
-      operating_expenses: exp.total,
+      packaging_used: packagingUsed,
+      operating_expenses: operatingExpenses,
 
       net_profit: netProfit,
       net_margin_pct:

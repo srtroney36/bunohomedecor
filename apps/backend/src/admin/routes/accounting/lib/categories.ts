@@ -16,16 +16,16 @@ export type CategoryMeta = {
   help: string
 }
 
-// Categories a human can hand-enter in the Cash Book. `fixed_asset` and `marketing` are
-// intentionally absent — they are created from their own tabs, which write the cash row.
-export const MANUAL_CATEGORIES = [
-  "capital_contribution",
-  "partner_drawing",
-  "inventory_purchase",
-  "courier_fee",
-  "other_expense",
-  "refund",
-] as const
+// Categories a human hand-enters in the Cash Book. Only partner equity remains here —
+// everything else has a dedicated tab that writes the cash row:
+//   inventory_purchase -> Restock, packaging_purchase -> Packaging,
+//   fixed_asset -> Fixed Assets, marketing -> Marketing,
+//   other_expense / courier_fee / refund -> Operational Expenses.
+export const MANUAL_CATEGORIES = ["capital_contribution", "partner_drawing"] as const
+
+// The manual P&L expenses, recorded from the Operational Expenses tab.
+// (courier_fee is manual for now; a delivery-partner auto-pull is a planned follow-up.)
+export const OPERATIONAL_CATEGORIES = ["other_expense", "courier_fee", "refund"] as const
 
 export const CATEGORY_META: Record<string, CategoryMeta> = {
   capital_contribution: {
@@ -45,6 +45,14 @@ export const CATEGORY_META: Record<string, CategoryMeta> = {
     klass: "asset",
     direction: "out",
     help: "Cash became goods. NOT an expense — it becomes COGS only when the item actually sells.",
+  },
+  packaging_purchase: {
+    label: "Packaging purchase (tops up the pool)",
+    klass: "asset",
+    direction: "out",
+    help:
+      "Cash became boxes and wrap. NOT an expense — it becomes a cost as orders draw their " +
+      "packaging preset out of the pool.",
   },
   fixed_asset: {
     label: "Fixed asset purchase",

@@ -42,6 +42,7 @@ type Insights = {
     courier_cost: number
     other_expenses: number
     refunds: number
+    packaging_used: number
     operating_expenses: number
     net_profit: number
     net_margin_pct: number
@@ -235,9 +236,9 @@ const SalesInsightsPage = () => {
               <Kpi label="Cost of goods (COGS)" value={money(m.cogs, cur)} />
               <Kpi label="Marketing / ads" value={money(m.marketing_spend, cur)} accent="red" />
               <Kpi
-                label="Courier + other"
-                value={money(m.courier_cost + m.other_expenses + m.refunds, cur)}
-                hint="courier, refunds, other expenses"
+                label="Packaging + courier + other"
+                value={money(m.packaging_used + m.courier_cost + m.other_expenses + m.refunds, cur)}
+                hint="packaging used, courier, refunds, other"
                 accent="red"
               />
             </div>

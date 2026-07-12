@@ -21,15 +21,19 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const ids = variants.map((v) => v.id)
 
   const costs = ids.length ? await svc.listVariantCosts({ variant_id: ids }) : []
-  const costMap = new Map(costs.map((c: any) => [c.variant_id, c.cost]))
+  const costMap = new Map(costs.map((c: any) => [c.variant_id, c]))
 
   res.json({
-    variant_costs: variants.map((v) => ({
-      variant_id: v.id,
-      title: v.title,
-      sku: v.sku,
-      cost: Number(costMap.get(v.id) ?? 0),
-    })),
+    variant_costs: variants.map((v) => {
+      const row: any = costMap.get(v.id)
+      return {
+        variant_id: v.id,
+        title: v.title,
+        sku: v.sku,
+        cost: Number(row?.cost ?? 0),
+        packaging_cost: Number(row?.packaging_cost ?? 0),
+      }
+    }),
   })
 }
 
@@ -37,7 +41,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const svc = req.scope.resolve(PRODUCT_COST_MODULE)
   const { costs } = (req.body ?? {}) as {
-    costs?: { variant_id: string; cost: number | string }[]
+    costs?: { variant_id: string; cost?: number | string; packaging_cost?: number | string }[]
   }
   if (!costs?.length) {
     return res.status(400).json({ error: "costs[] is required" })
@@ -45,15 +49,26 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
 
   const variantIds = costs.map((c) => c.variant_id)
   const existing = await svc.listVariantCosts({ variant_id: variantIds })
-  const existingMap = new Map(existing.map((e: any) => [e.variant_id, e.id]))
+  const existingMap = new Map(existing.map((e: any) => [e.variant_id, e]))
 
-  const toCreate: { variant_id: string; cost: number }[] = []
-  const toUpdate: { id: string; cost: number }[] = []
+  // Only touch a field the caller actually sent, so saving a cost doesn't wipe packaging.
+  const nonNeg = (v: unknown) => Math.max(0, Number(v) || 0)
+  const toCreate: any[] = []
+  const toUpdate: any[] = []
   for (const c of costs) {
-    const amount = Math.max(0, Number(c.cost) || 0)
-    const id = existingMap.get(c.variant_id)
-    if (id) toUpdate.push({ id, cost: amount })
-    else toCreate.push({ variant_id: c.variant_id, cost: amount })
+    const row: any = existingMap.get(c.variant_id)
+    if (row) {
+      const patch: any = { id: row.id }
+      if (c.cost !== undefined) patch.cost = nonNeg(c.cost)
+      if (c.packaging_cost !== undefined) patch.packaging_cost = nonNeg(c.packaging_cost)
+      toUpdate.push(patch)
+    } else {
+      toCreate.push({
+        variant_id: c.variant_id,
+        cost: nonNeg(c.cost),
+        packaging_cost: nonNeg(c.packaging_cost),
+      })
+    }
   }
 
   if (toCreate.length) await svc.createVariantCosts(toCreate)

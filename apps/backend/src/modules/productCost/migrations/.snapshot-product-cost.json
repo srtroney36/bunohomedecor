@@ -54,6 +54,22 @@
           "enumItems": [],
           "mappedType": "decimal"
         },
+        "packaging_cost": {
+          "name": "packaging_cost",
+          "type": "numeric",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "0",
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "decimal"
+        },
         "currency_code": {
           "name": "currency_code",
           "type": "text",
@@ -72,6 +88,22 @@
         },
         "raw_cost": {
           "name": "raw_cost",
+          "type": "jsonb",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": false,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": "'{\"value\":\"0\",\"precision\":20}'",
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "json"
+        },
+        "raw_packaging_cost": {
+          "name": "raw_packaging_cost",
           "type": "jsonb",
           "unsigned": false,
           "autoincrement": false,

@@ -13,6 +13,11 @@ export const accountingMiddlewares: MiddlewareRoute[] = [
     method: ["GET"],
     middlewares: [validateAndTransformQuery(V.GetDashboardSchema, {})],
   },
+  {
+    matcher: "/admin/accounting/restock",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(V.RestockSchema)],
+  },
 
   // ledger
   {

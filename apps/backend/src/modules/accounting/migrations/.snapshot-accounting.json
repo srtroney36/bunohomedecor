@@ -368,6 +368,7 @@
             "capital_contribution",
             "partner_drawing",
             "inventory_purchase",
+            "packaging_purchase",
             "fixed_asset",
             "marketing",
             "courier_fee",
@@ -472,7 +473,8 @@
           "enumItems": [
             "manual",
             "fixed_asset",
-            "marketing_spend"
+            "marketing_spend",
+            "restock"
           ],
           "mappedType": "enum"
         },

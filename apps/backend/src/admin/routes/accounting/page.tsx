@@ -8,7 +8,10 @@ import { CashBookSection } from "./sections/cash-book-section"
 import { DashboardSection } from "./sections/dashboard-section"
 import { FixedAssetsSection } from "./sections/fixed-assets-section"
 import { MarketingSection } from "./sections/marketing-section"
+import { OperationalSection } from "./sections/operational-section"
+import { PackagingSection } from "./sections/packaging-section"
 import { PartnersSection } from "./sections/partners-section"
+import { RestockSection } from "./sections/restock-section"
 
 const AccountingPage = () => {
   const { can, isLoading } = usePermissions()
@@ -63,8 +66,11 @@ const AccountingPage = () => {
             <Tabs.Trigger value="dashboard">Dashboard</Tabs.Trigger>
             <Tabs.Trigger value="partners">Investment Pool</Tabs.Trigger>
             <Tabs.Trigger value="fixed-assets">Fixed Assets</Tabs.Trigger>
-            <Tabs.Trigger value="cash-book">Cash Book</Tabs.Trigger>
+            <Tabs.Trigger value="restock">Restock</Tabs.Trigger>
+            <Tabs.Trigger value="packaging">Packaging</Tabs.Trigger>
             <Tabs.Trigger value="marketing">Marketing</Tabs.Trigger>
+            <Tabs.Trigger value="operational">Operational Expenses</Tabs.Trigger>
+            <Tabs.Trigger value="cash-book">Cash Book</Tabs.Trigger>
           </Tabs.List>
 
           <div className="mt-6">
@@ -77,11 +83,20 @@ const AccountingPage = () => {
             <Tabs.Content value="fixed-assets">
               <FixedAssetsSection />
             </Tabs.Content>
-            <Tabs.Content value="cash-book">
-              <CashBookSection />
+            <Tabs.Content value="restock">
+              <RestockSection />
+            </Tabs.Content>
+            <Tabs.Content value="packaging">
+              <PackagingSection />
             </Tabs.Content>
             <Tabs.Content value="marketing">
               <MarketingSection />
+            </Tabs.Content>
+            <Tabs.Content value="operational">
+              <OperationalSection />
+            </Tabs.Content>
+            <Tabs.Content value="cash-book">
+              <CashBookSection />
             </Tabs.Content>
           </div>
         </Tabs>

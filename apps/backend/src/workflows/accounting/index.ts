@@ -1,6 +1,7 @@
 import {
   createWorkflow,
   transform,
+  when,
   WorkflowResponse,
 } from "@medusajs/framework/workflows-sdk"
 
@@ -9,6 +10,11 @@ import {
   deleteLedgerEntryStep,
   type CreateLedgerEntryInput,
 } from "./steps/ledger-entry"
+import {
+  bookRestockCashStep,
+  receiveStockStep,
+  updateVariantCostStep,
+} from "./steps/restock"
 import {
   createPartnerStep,
   deletePartnerStep,
@@ -32,6 +38,65 @@ import {
   deleteLedgerEntryBySourceStep,
   upsertLedgerEntryForSourceStep,
 } from "./steps/sync-ledger"
+
+/* -------------------------------------- restock ------------------------------------ */
+
+export type RestockInput = {
+  variant_id: string
+  quantity: number
+  unit_cost: number
+  freight?: number
+  update_cost?: boolean
+  purchase_date?: Date
+  supplier?: string | null
+  note?: string | null
+}
+
+/**
+ * The one-step restock: goods in AND cash out, together.
+ *
+ * 1. Raise the ecommerce stock for the variant.
+ * 2. Book the cash paid (goods + freight) as an `inventory_purchase` — an ASSET, so net
+ *    worth stays flat: cash went down, but inventory value went up by the same amount.
+ * 3. Optionally repoint the cost price to this restock's landed unit cost.
+ *
+ * This is what stops the two halves from drifting: you can't receive stock and forget the
+ * cash, or record cash for goods you never received.
+ */
+export const restockWorkflow = createWorkflow(
+  "restock",
+  function (input: RestockInput) {
+    const received = receiveStockStep({
+      variant_id: input.variant_id,
+      quantity: input.quantity,
+    })
+
+    const ledgerInput = transform({ input, received }, ({ input, received }) => {
+      const goods = Number(input.unit_cost) * Number(input.quantity)
+      const cashOut = goods + Number(input.freight || 0)
+      return {
+        entry_date: input.purchase_date ?? new Date(),
+        amount: cashOut,
+        description: `Restock: ${input.quantity} × ${received.label}`,
+        reference: input.supplier ?? null,
+      }
+    })
+    bookRestockCashStep(ledgerInput)
+
+    when({ input }, ({ input }) => !!input.update_cost).then(() => {
+      const costInput = transform({ input }, ({ input }) => {
+        const cashOut = Number(input.unit_cost) * Number(input.quantity) + Number(input.freight || 0)
+        return {
+          variant_id: input.variant_id,
+          cost: Number(input.quantity) > 0 ? cashOut / Number(input.quantity) : Number(input.unit_cost),
+        }
+      })
+      updateVariantCostStep(costInput)
+    })
+
+    return new WorkflowResponse(received)
+  }
+)
 
 /* -------------------------------------- ledger ------------------------------------- */
 

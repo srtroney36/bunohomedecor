@@ -3,6 +3,7 @@ import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 
 import { ACCOUNTING_MODULE } from "../../../modules/accounting"
 import {
+  CATEGORY_ENTRY_POINT,
   CATEGORY_META,
   PARTNER_REQUIRED_CATEGORIES,
   REGISTER_OWNED_CATEGORIES,
@@ -42,15 +43,14 @@ export const createLedgerEntryStep = createStep(
       )
     }
 
-    // Fixed assets and marketing own their own mirrored ledger rows. Letting someone also
-    // type one straight into the Cash Book would drift the ledger away from the register
-    // that is supposed to explain it.
+    // Some categories are owned by a dedicated flow that writes the cash row itself.
+    // Hand-entering one in the Cash Book would drift the ledger from what really happened.
     if (REGISTER_OWNED_CATEGORIES.includes(input.category)) {
+      const where = CATEGORY_ENTRY_POINT[input.category] ?? "its own tab"
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        `"${meta.label}" entries are created from their own tab, not the Cash Book — ` +
-          `use /admin/accounting/${input.category === "fixed_asset" ? "fixed-assets" : "marketing"}. ` +
-          `The cash row is written for you.`
+        `"${meta.label}" is recorded from ${where}, not the Cash Book — the cash row is ` +
+          `written for you there.`
       )
     }
 
@@ -104,14 +104,15 @@ export const deleteLedgerEntryStep = createStep(
       throw new MedusaError(MedusaError.Types.NOT_FOUND, `Ledger entry "${input.id}" not found.`)
     }
 
-    // A mirrored row is owned by its register. Deleting it here would leave the fixed asset
-    // or ad spend on the books with no cash ever having left the account.
+    // A non-manual row belongs to a dedicated flow. Deleting it here would strand its other
+    // half — a fixed asset with no cash, or (worse) a restock whose stock stays on the shelf
+    // while the cash that paid for it vanishes from the books.
     if (existing.source_type !== "manual") {
-      throw new MedusaError(
-        MedusaError.Types.NOT_ALLOWED,
-        `This row mirrors a ${existing.source_type.replace("_", " ")} and cannot be deleted from the ` +
-          `Cash Book. Delete the underlying record instead and this row goes with it.`
-      )
+      const msg =
+        existing.source_type === "restock"
+          ? "This row is part of a restock (cash + stock together) and can't be deleted from the Cash Book, or the stock and its cash would drift apart."
+          : `This row mirrors a ${existing.source_type.replace("_", " ")} and can't be deleted from the Cash Book. Delete the underlying record instead and this row goes with it.`
+      throw new MedusaError(MedusaError.Types.NOT_ALLOWED, msg)
     }
 
     await svc.deleteLedgerEntries([input.id])

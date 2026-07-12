@@ -52,6 +52,19 @@ export async function GET(
   const fixed_assets_value = ownedAssets.reduce((s: number, a: any) => s + Number(a.cost), 0)
 
   /**
+   * THE PACKAGING POOL — money tied up in boxes, tape and wrap you are still holding.
+   *
+   * Bought comes from the ledger (a cash->asset swap). Used is DERIVED from orders (each
+   * non-cancelled order drew its per-unit presets when placed). The pool is what's left.
+   *
+   * A NEGATIVE pool is not a bug — it is the signal this exists to give: your per-product
+   * packaging presets are lower than what packaging is really costing you. Raise them.
+   */
+  const packaging_bought = ledger.packaging_purchases
+  const packaging_used_lifetime = lifetimeSales.metrics.packaging_used
+  const packaging_pool = packaging_bought - packaging_used_lifetime
+
+  /**
    * CASH ON HAND — and the reason revenue is never journaled.
    *
    * `ledger.cash_delta` is only the money WE moved: capital in and out, restocks, assets,
@@ -65,16 +78,21 @@ export async function GET(
   const cash_on_hand = ledger.cash_delta + cash_from_sales
 
   // "The money that is rolling in the ecommerce": everything not nailed down in equipment —
-  // stock on the shelf, cash in the account, and cash a courier still owes us.
-  const working_capital = inventory.inventory_at_cost + cash_on_hand + cod_receivables
+  // stock on the shelf, packaging in the pool, cash in the account, and cash a courier owes us.
+  const working_capital =
+    inventory.inventory_at_cost + packaging_pool + cash_on_hand + cod_receivables
 
   const net_worth = fixed_assets_value + working_capital
 
   // What the business has earned on top of what the partners put in.
   const retained_earnings = net_worth - ledger.total_invested
 
+  // Packaging consumed by orders placed in the period is a real cost (the boxes are gone),
+  // so it reduces net profit alongside the ledger expenses.
+  const packaging_used_period = periodSales.metrics.packaging_used
   const gross = periodSales.metrics.gross_profit
-  const net_profit = gross - periodExpenses.total
+  const operating_expenses = periodExpenses.total + packaging_used_period
+  const net_profit = gross - operating_expenses
 
   res.json({
     currency_code: lifetimeSales.currency_code ?? "bdt",
@@ -96,6 +114,13 @@ export async function GET(
       fixed_assets_value,
       cash_on_hand,
       cod_receivables,
+      packaging_pool,
+    },
+
+    packaging: {
+      bought: packaging_bought,
+      used: packaging_used_lifetime,
+      pool: packaging_pool,
     },
 
     equity: {
@@ -123,7 +148,8 @@ export async function GET(
       courier_fee: periodExpenses.courier_fee,
       other_expense: periodExpenses.other_expense,
       refund: periodExpenses.refund,
-      operating_expenses: periodExpenses.total,
+      packaging_used: packaging_used_period,
+      operating_expenses,
       net_profit,
       net_margin_pct:
         periodSales.metrics.product_revenue > 0

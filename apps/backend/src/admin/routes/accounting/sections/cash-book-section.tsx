@@ -75,8 +75,9 @@ export function CashBookSection() {
         <div>
           <Text weight="plus">Cash Book</Text>
           <Text size="small" className="text-ui-fg-subtle">
-            Every money movement Medusa can't see. Restocking and fixed assets are cash-out
-            but <b>not</b> expenses — that money became goods and equipment you still own.
+            The full record of every money movement. Restocks, packaging, fixed assets,
+            marketing and expenses are added from their own tabs and appear here tagged
+            <b> auto</b>. Use "Record movement" only for partner capital in and out.
           </Text>
         </div>
         <Button size="small" variant="secondary" onClick={() => setOpen(true)}>
@@ -171,7 +172,7 @@ export function CashBookSection() {
 }
 
 function RecordModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [category, setCategory] = useState<string>("inventory_purchase")
+  const [category, setCategory] = useState<string>("capital_contribution")
   const [amount, setAmount] = useState("")
   const [date, setDate] = useState<Date>(new Date())
   const [description, setDescription] = useState("")

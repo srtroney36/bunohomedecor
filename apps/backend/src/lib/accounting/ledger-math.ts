@@ -45,6 +45,7 @@ export type LedgerSummary = {
   total_invested: number
 
   inventory_purchases: number
+  packaging_purchases: number
   fixed_asset_purchases: number
 }
 
@@ -72,6 +73,7 @@ export function summariseLedger(rows: LedgerRow[]): LedgerSummary {
     partner_drawings: drawings,
     total_invested: capital - drawings,
     inventory_purchases: byCategory.inventory_purchase,
+    packaging_purchases: byCategory.packaging_purchase,
     fixed_asset_purchases: byCategory.fixed_asset,
   }
 }

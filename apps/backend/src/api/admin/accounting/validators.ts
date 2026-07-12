@@ -124,6 +124,23 @@ export const GetMarketingSummarySchema = z.object({
 })
 export type GetMarketingSummarySchema = z.infer<typeof GetMarketingSummarySchema>
 
+/* -------------------------------------- restock ------------------------------------ */
+
+export const RestockSchema = z
+  .object({
+    variant_id: z.string().min(1),
+    quantity: z.coerce.number().int().positive(),
+    unit_cost: Money,
+    freight: z.coerce.number().finite().min(0).default(0),
+    // Repoint the variant's cost price to this restock's landed unit cost.
+    update_cost: z.coerce.boolean().default(false),
+    purchase_date: D.optional(),
+    supplier: z.string().max(200).nullish(),
+    note: z.string().max(500).nullish(),
+  })
+  .strict()
+export type RestockSchema = z.infer<typeof RestockSchema>
+
 /* ------------------------------------ dashboard ------------------------------------ */
 
 /**
