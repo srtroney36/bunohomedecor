@@ -19,11 +19,17 @@ import {
   Heading,
   Input,
   Label,
+  Tabs,
   Text,
   toast,
 } from "@medusajs/ui"
-import { useEffect, useState, type ComponentType, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react"
 import { adminFetch } from "../../lib/api"
+import { usePermissions } from "../../lib/permissions"
+import AccessControlPage from "../access-control/page"
+import BrandsPage from "../brands/page"
+import HomepagePage from "../homepage/page"
+import ProductCardsPage from "../product-cards/page"
 import { PaymentsSection } from "./sections/payments-section"
 import { CouriersSection } from "./sections/couriers-section"
 import { TrackingSection } from "./sections/tracking-section"
@@ -139,16 +145,15 @@ function ContactSettings() {
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-const StoreSettingsPage = () => {
+// ── Integrations tab (the original Store Settings content) ────────────────────
+
+function IntegrationSettings() {
   return (
-    <div className="flex flex-col gap-y-4 p-4 max-w-3xl">
-      <div>
-        <Heading level="h1">Store Settings</Heading>
-        <Text size="small" className="text-ui-fg-subtle mt-1">
-          Integration secrets (API keys, tokens) are set as environment variables on your server.
-          Each card shows whether it is configured and lets you turn it on or off.
-        </Text>
-      </div>
+    <div className="flex flex-col gap-y-4 max-w-3xl">
+      <Text size="small" className="text-ui-fg-subtle">
+        Integration secrets (API keys, tokens) are set as environment variables on your server.
+        Each card shows whether it is configured and lets you turn it on or off.
+      </Text>
 
       <CategorySection title="Storefront Contact Buttons" description="WhatsApp & call buttons on product pages" icon={ChatBubbleLeftRight} defaultOpen>
         <ContactSettings />
@@ -189,10 +194,91 @@ const StoreSettingsPage = () => {
   )
 }
 
+// ── Page ───────────────────────────────────────────────────────────────────────
+
+/**
+ * One home for everything that configures the store: integrations, the storefront's
+ * Homepage and Product Cards, Brands, and Access Control. These used to be five separate
+ * sidebar entries; they are tabs here so the sidebar stays about running the business.
+ *
+ * Tabs are permission-gated the same way the Accounting page does it — the API is still the
+ * real boundary (it 403s), but there is no reason to show someone a tab they can't use.
+ */
+const StoreSettingsPage = () => {
+  const { can, isLoading } = usePermissions()
+  const [tab, setTab] = useState<string | null>(null)
+
+  const tabs = useMemo(
+    () =>
+      [
+        can("store_settings", "read") && { value: "integrations", label: "Integrations" },
+        can("homepage", "read") && { value: "homepage", label: "Homepage" },
+        can("store_settings", "read") && { value: "product-cards", label: "Product Cards" },
+        can("brands", "read") && { value: "brands", label: "Brands" },
+        can("rbac", "read") && { value: "access-control", label: "Access Control" },
+      ].filter(Boolean) as { value: string; label: string }[],
+    [can]
+  )
+
+  if (isLoading) return null
+
+  if (!tabs.length) {
+    return (
+      <Container className="p-8">
+        <Text className="text-ui-fg-subtle">
+          You don't have access to the Store Settings section.
+        </Text>
+      </Container>
+    )
+  }
+
+  // Fall back to the first tab the user can actually see.
+  const active = tab && tabs.some((t) => t.value === tab) ? tab : tabs[0].value
+
+  return (
+    <div className="flex flex-col gap-y-4 p-4">
+      <div>
+        <Heading level="h1">Store Settings</Heading>
+        <Text size="small" className="text-ui-fg-subtle mt-1">
+          Everything that configures the store and its storefront.
+        </Text>
+      </div>
+
+      <Tabs value={active} onValueChange={setTab}>
+        <Tabs.List>
+          {tabs.map((t) => (
+            <Tabs.Trigger key={t.value} value={t.value}>
+              {t.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+
+        <div className="mt-4">
+          <Tabs.Content value="integrations">
+            <IntegrationSettings />
+          </Tabs.Content>
+          <Tabs.Content value="homepage">
+            <HomepagePage />
+          </Tabs.Content>
+          <Tabs.Content value="product-cards">
+            <ProductCardsPage />
+          </Tabs.Content>
+          <Tabs.Content value="brands">
+            <BrandsPage />
+          </Tabs.Content>
+          <Tabs.Content value="access-control">
+            <AccessControlPage />
+          </Tabs.Content>
+        </div>
+      </Tabs>
+    </div>
+  )
+}
+
 export const config = defineRouteConfig({
   label: "Store Settings",
   icon: AdjustmentsDone,
-  rank: 99,
+  rank: 100, // last in the sidebar
 })
 
 export default StoreSettingsPage

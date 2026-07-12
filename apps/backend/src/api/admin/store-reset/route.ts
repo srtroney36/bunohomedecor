@@ -1,8 +1,13 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
 
-// Typing the confirmation phrase is required to run this destructive reset.
+import { ACCOUNTING_MODULE } from "../../../modules/accounting"
+import { PRODUCT_COST_MODULE } from "../../../modules/productCost"
+
+// Typing the confirmation phrase is required to run this destructive reset. Wiping EVERYTHING
+// (products included) is a bigger decision, so it demands a phrase of its own.
 const CONFIRM_PHRASE = "store reset"
+const NUKE_PHRASE = "reset everything"
 const PAGE = 500
 
 type ResetBody = {
@@ -10,6 +15,10 @@ type ResetBody = {
   inventory?: { enabled?: boolean; value?: 0 | 1 }
   orders?: boolean
   customers?: { enabled?: boolean; identities?: boolean }
+  /** Wipes the books AND the stock they account for — the two must go together. */
+  accounting?: boolean
+  /** The lot: accounting + inventory + orders + customers + products. */
+  everything?: boolean
 }
 
 // Collect every id from a paginated list method: listFn(skip, take) -> rows[]
@@ -28,53 +37,128 @@ async function collectIds(
   return ids
 }
 
+/** Force every stock level to a fixed quantity. */
+async function setAllStockLevels(scope: any, value: number): Promise<number> {
+  const inventory = scope.resolve(Modules.INVENTORY) as any
+  let skip = 0
+  let updated = 0
+  for (;;) {
+    const levels = await inventory.listInventoryLevels(
+      {},
+      { take: PAGE, skip, select: ["id", "inventory_item_id", "location_id"] }
+    )
+    if (!levels?.length) break
+    await inventory.updateInventoryLevels(
+      levels.map((l: any) => ({
+        inventory_item_id: l.inventory_item_id,
+        location_id: l.location_id,
+        stocked_quantity: value,
+      }))
+    )
+    updated += levels.length
+    if (levels.length < PAGE) break
+    skip += levels.length
+  }
+  return updated
+}
+
+/**
+ * Drop every FIFO cost layer and write-off, and zero the cached "latest cost".
+ *
+ * This ALWAYS runs alongside a forced stock quantity. Physical stock and cost batches are two
+ * views of the same units — force one without the other and the books instantly disagree with
+ * the shelf (the drift warning would light up on every product). Packaging presets survive:
+ * they're product configuration, not an accounting record.
+ */
+async function purgeStockLayers(scope: any): Promise<{ batches: number; movements: number }> {
+  const costSvc = scope.resolve(PRODUCT_COST_MODULE) as any
+
+  const batches = await costSvc.listStockBatches({}, { take: 200000, select: ["id"] })
+  if (batches.length) await costSvc.deleteStockBatches(batches.map((b: any) => b.id))
+
+  const movements = await costSvc.listStockMovements({}, { take: 200000, select: ["id"] })
+  if (movements.length) await costSvc.deleteStockMovements(movements.map((m: any) => m.id))
+
+  const costs = await costSvc.listVariantCosts({}, { take: 200000 })
+  if (costs.length) {
+    await costSvc.updateVariantCosts(costs.map((c: any) => ({ id: c.id, cost: 0 })))
+  }
+
+  return { batches: batches.length, movements: movements.length }
+}
+
 export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const body = (req.body ?? {}) as ResetBody
   const logger = req.scope.resolve("logger") as any
 
-  if (body.confirm !== CONFIRM_PHRASE) {
-    return res.status(400).json({ error: `Type "${CONFIRM_PHRASE}" exactly to confirm.` })
+  const wantEverything = Boolean(body.everything)
+
+  // The nuclear option gets its own phrase — "store reset" is too easy to type by habit.
+  const required = wantEverything ? NUKE_PHRASE : CONFIRM_PHRASE
+  if (body.confirm !== required) {
+    return res.status(400).json({ error: `Type "${required}" exactly to confirm.` })
   }
 
-  const wantInventory = Boolean(body.inventory?.enabled)
-  const wantOrders = Boolean(body.orders)
-  const wantCustomers = Boolean(body.customers?.enabled)
+  const wantAccounting = wantEverything || Boolean(body.accounting)
+  // Accounting and "everything" both force stock to zero — the books and the shelf move together.
+  const wantInventory = wantEverything || wantAccounting || Boolean(body.inventory?.enabled)
+  const wantOrders = wantEverything || Boolean(body.orders)
+  const wantCustomers = wantEverything || Boolean(body.customers?.enabled)
+  const wantProducts = wantEverything
 
-  if (!wantInventory && !wantOrders && !wantCustomers) {
+  if (!wantInventory && !wantOrders && !wantCustomers && !wantAccounting) {
     return res.status(400).json({ error: "Select at least one thing to reset." })
   }
 
   const summary: Record<string, unknown> = {}
   const errors: Record<string, string> = {}
 
-  // ── Inventory: set every stock level to the chosen value (0 or 1) ────────────
+  // ── Inventory: force every stock level, and drop the cost layers behind it ───
   if (wantInventory) {
-    const value = body.inventory?.value === 1 ? 1 : 0
+    // A reset that keeps 1 unit still has to drop the batches, or those units would be
+    // "backed" by cost layers that no longer reflect reality.
+    const value = !wantAccounting && body.inventory?.value === 1 ? 1 : 0
     try {
-      const inventory = req.scope.resolve(Modules.INVENTORY) as any
-      let skip = 0
-      let updated = 0
-      for (;;) {
-        const levels = await inventory.listInventoryLevels(
-          {},
-          { take: PAGE, skip, select: ["id", "inventory_item_id", "location_id"] }
-        )
-        if (!levels?.length) break
-        await inventory.updateInventoryLevels(
-          levels.map((l: any) => ({
-            inventory_item_id: l.inventory_item_id,
-            location_id: l.location_id,
-            stocked_quantity: value,
-          }))
-        )
-        updated += levels.length
-        if (levels.length < PAGE) break
-        skip += levels.length
+      const updated = await setAllStockLevels(req.scope, value)
+      const purged = await purgeStockLayers(req.scope)
+      summary.inventory = {
+        levels_updated: updated,
+        set_to: value,
+        batches_deleted: purged.batches,
+        movements_deleted: purged.movements,
       }
-      summary.inventory = { levels_updated: updated, set_to: value }
     } catch (e: any) {
       errors.inventory = e.message
       logger?.error(`[store-reset] inventory failed: ${e.message}`)
+    }
+  }
+
+  // ── Accounting: the books themselves ────────────────────────────────────────
+  if (wantAccounting) {
+    try {
+      const acct = req.scope.resolve(ACCOUNTING_MODULE) as any
+
+      const ledger = await acct.listLedgerEntries({}, { take: 200000, select: ["id"] })
+      if (ledger.length) await acct.deleteLedgerEntries(ledger.map((r: any) => r.id))
+
+      const assets = await acct.listFixedAssets({}, { take: 200000, select: ["id"] })
+      if (assets.length) await acct.deleteFixedAssets(assets.map((r: any) => r.id))
+
+      const marketing = await acct.listMarketingSpends({}, { take: 200000, select: ["id"] })
+      if (marketing.length) await acct.deleteMarketingSpends(marketing.map((r: any) => r.id))
+
+      const partners = await acct.listPartners({}, { take: 200000, select: ["id"] })
+      if (partners.length) await acct.deletePartners(partners.map((r: any) => r.id))
+
+      summary.accounting = {
+        ledger_entries: ledger.length,
+        fixed_assets: assets.length,
+        marketing_spends: marketing.length,
+        partners: partners.length,
+      }
+    } catch (e: any) {
+      errors.accounting = e.message
+      logger?.error(`[store-reset] accounting failed: ${e.message}`)
     }
   }
 
@@ -177,6 +261,37 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     } catch (e: any) {
       errors.customers = e.message
       logger?.error(`[store-reset] customers failed: ${e.message}`)
+    }
+  }
+
+  // ── Products: last, because orders reference the variants ───────────────────
+  // Categories, collections, brands, settings, users and roles are deliberately kept — this
+  // clears the catalogue, not the shop's configuration.
+  if (wantProducts) {
+    try {
+      const productSvc = req.scope.resolve(Modules.PRODUCT) as any
+      const productIds = await collectIds((skip, take) =>
+        productSvc.listProducts({}, { take, skip, select: ["id"] })
+      )
+      if (productIds.length) await productSvc.softDeleteProducts(productIds)
+
+      // The inventory items those variants pointed at are orphans now.
+      let itemCount = 0
+      try {
+        const inventory = req.scope.resolve(Modules.INVENTORY) as any
+        const itemIds = await collectIds((skip, take) =>
+          inventory.listInventoryItems({}, { take, skip, select: ["id"] })
+        )
+        if (itemIds.length) await inventory.softDeleteInventoryItems(itemIds)
+        itemCount = itemIds.length
+      } catch (e: any) {
+        errors.inventory_items = e.message
+      }
+
+      summary.products = { products: productIds.length, inventory_items: itemCount }
+    } catch (e: any) {
+      errors.products = e.message
+      logger?.error(`[store-reset] products failed: ${e.message}`)
     }
   }
 

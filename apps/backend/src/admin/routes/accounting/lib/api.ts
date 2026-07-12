@@ -20,7 +20,12 @@ export type LedgerEntry = {
   description: string | null
   reference: string | null
   partner_id: string | null
-  source_type: "manual" | "fixed_asset" | "marketing_spend"
+  source_type: "manual" | "fixed_asset" | "marketing_spend" | "restock"
+  /** Server-decided: a row owned by a register (or by a stock batch) can't be touched here. */
+  can_edit: boolean
+  can_delete: boolean
+  /** Why it's locked, and where to change it instead. Null when free to edit. */
+  locked_reason: string | null
 }
 
 export type LedgerResponse = {
@@ -184,6 +189,8 @@ export const api = {
   },
   createLedger: (body: unknown) =>
     rbacFetch(`/accounting/ledger`, { method: "POST", body: JSON.stringify(body) }),
+  updateLedger: (id: string, body: unknown) =>
+    rbacFetch(`/accounting/ledger/${id}`, { method: "POST", body: JSON.stringify(body) }),
   deleteLedger: (id: string) =>
     rbacFetch(`/accounting/ledger/${id}`, { method: "DELETE" }),
 

@@ -30,6 +30,22 @@ export const CreateLedgerEntrySchema = z
   .strict()
 export type CreateLedgerEntrySchema = z.infer<typeof CreateLedgerEntrySchema>
 
+/**
+ * Edit a cash movement. Every field optional — omitted fields keep their value. `direction` is
+ * absent for the same reason it is on create: it belongs to the category, not the caller.
+ */
+export const UpdateLedgerEntrySchema = z
+  .object({
+    entry_date: D.optional(),
+    category: z.enum(LEDGER_CATEGORIES).optional(),
+    amount: Money.optional(),
+    description: z.string().max(500).nullish(),
+    reference: z.string().max(200).nullish(),
+    partner_id: z.string().nullish(),
+  })
+  .strict()
+export type UpdateLedgerEntrySchema = z.infer<typeof UpdateLedgerEntrySchema>
+
 export const GetLedgerSchema = z.object({
   from: D.optional(),
   to: D.optional(),

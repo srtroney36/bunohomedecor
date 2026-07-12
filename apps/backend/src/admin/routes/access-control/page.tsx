@@ -1,5 +1,3 @@
-import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { ShieldCheck } from "@medusajs/icons"
 import {
   Badge,
   Button,
@@ -696,10 +694,6 @@ const AccessControlPage = () => {
   )
 }
 
-export const config = defineRouteConfig({
-  label: "Access Control",
-  icon: ShieldCheck,
-  rank: 98,
-})
-
+// No route config on purpose: this is now a tab inside Store Settings rather than its own
+// sidebar entry. The page still renders at /app/access-control if you link to it directly.
 export default AccessControlPage

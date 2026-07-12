@@ -1,8 +1,10 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
+import { ledgerRowGuard } from "../../../../lib/accounting/ledger-guard"
+import { summariseLedger } from "../../../../lib/accounting/ledger-math"
 import { ACCOUNTING_MODULE } from "../../../../modules/accounting"
 import { CATEGORY_META } from "../../../../modules/accounting/categories"
-import { summariseLedger } from "../../../../lib/accounting/ledger-math"
+import { PRODUCT_COST_MODULE } from "../../../../modules/productCost"
 import { createLedgerEntryWorkflow } from "../../../../workflows/accounting"
 import type { CreateLedgerEntrySchema, GetLedgerSchema } from "../validators"
 
@@ -36,13 +38,39 @@ export async function GET(
   const all = await svc.listLedgerEntries(filters, { take: 100000 })
   const summary = summariseLedger(all)
 
+  /**
+   * Which rows may the Cash Book edit/delete? A `restock` row is normally locked to its stock
+   * batch, so we look up which of these rows actually have one. An orphan (cash with no batch —
+   * a leftover from before batches existed) is free to fix or remove.
+   */
+  const costSvc: any = req.scope.resolve(PRODUCT_COST_MODULE)
+  const restockIds = entries
+    .filter((e: any) => e.source_type === "restock")
+    .map((e: any) => e.id)
+
+  const backed = new Set<string>()
+  if (restockIds.length) {
+    const batches = await costSvc.listStockBatches(
+      { ledger_entry_id: restockIds },
+      { take: 100000 }
+    )
+    for (const b of batches) backed.add(b.ledger_entry_id)
+  }
+
   res.json({
-    ledger_entries: entries.map((e: any) => ({
-      ...e,
-      amount: Number(e.amount),
-      klass: CATEGORY_META[e.category as keyof typeof CATEGORY_META]?.klass ?? "expense",
-      category_label: CATEGORY_META[e.category as keyof typeof CATEGORY_META]?.label ?? e.category,
-    })),
+    ledger_entries: entries.map((e: any) => {
+      const guard = ledgerRowGuard(e.source_type, backed.has(e.id))
+      return {
+        ...e,
+        amount: Number(e.amount),
+        klass: CATEGORY_META[e.category as keyof typeof CATEGORY_META]?.klass ?? "expense",
+        category_label:
+          CATEGORY_META[e.category as keyof typeof CATEGORY_META]?.label ?? e.category,
+        can_edit: guard.can_edit,
+        can_delete: guard.can_delete,
+        locked_reason: guard.reason,
+      }
+    }),
     count,
     limit,
     offset,

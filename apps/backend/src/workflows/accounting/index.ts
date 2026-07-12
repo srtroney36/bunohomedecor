@@ -8,7 +8,9 @@ import {
 import {
   createLedgerEntryStep,
   deleteLedgerEntryStep,
+  updateLedgerEntryStep,
   type CreateLedgerEntryInput,
+  type UpdateLedgerEntryInput,
 } from "./steps/ledger-entry"
 import {
   bookRestockCashStep,
@@ -292,6 +294,18 @@ export const deleteLedgerEntryWorkflow = createWorkflow(
   function (input: { id: string }) {
     const result = deleteLedgerEntryStep(input)
     return new WorkflowResponse(result)
+  }
+)
+
+/**
+ * Edit a cash movement. Nothing else needs touching: every dashboard figure is a SUM over the
+ * ledger, so the correction reaches cash on hand, net worth and the P&L on its own.
+ */
+export const updateLedgerEntryWorkflow = createWorkflow(
+  "update-ledger-entry",
+  function (input: UpdateLedgerEntryInput) {
+    const entry = updateLedgerEntryStep(input)
+    return new WorkflowResponse(entry)
   }
 )
 

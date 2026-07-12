@@ -122,7 +122,7 @@ const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
 
       <div className="flex justify-end">
         <Button size="small" onClick={() => save.mutate()} isLoading={save.isPending} disabled={isLoading}>
-          Save packaging
+          Save
         </Button>
       </div>
     </Container>

@@ -108,6 +108,7 @@ const AccountingPage = () => {
 export const config = defineRouteConfig({
   label: "Accounting",
   icon: CurrencyDollar,
+  rank: 6,
 })
 
 export default AccountingPage

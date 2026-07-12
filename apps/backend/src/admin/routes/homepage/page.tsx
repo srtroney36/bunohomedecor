@@ -1,5 +1,4 @@
-﻿import { defineRouteConfig } from "@medusajs/admin-sdk"
-import {
+﻿import {
   Badge,
   Button,
   Container,
@@ -315,9 +314,6 @@ const HomepagePage = () => {
   )
 }
 
-export const config = defineRouteConfig({
-  label: "Homepage",
-  rank: 2,
-})
-
+// No route config on purpose: this is now a tab inside Store Settings rather than its own
+// sidebar entry. The page still renders at /app/homepage if you link to it directly.
 export default HomepagePage

@@ -1,6 +1,4 @@
-﻿import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { Tag } from "@medusajs/icons"
-import {
+﻿import {
   Button,
   Container,
   Drawer,
@@ -381,10 +379,6 @@ const BrandsPage = () => {
   )
 }
 
-export const config = defineRouteConfig({
-  label: "Brands",
-  rank: 4,
-  icon: Tag,
-})
-
+// No route config on purpose: this is now a tab inside Store Settings rather than its own
+// sidebar entry. The page still renders at /app/brands if you link to it directly.
 export default BrandsPage

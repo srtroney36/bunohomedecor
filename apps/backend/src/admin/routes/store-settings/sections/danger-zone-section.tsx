@@ -14,6 +14,7 @@ import {
 import { adminFetch } from "../../../lib/api"
 
 const CONFIRM_PHRASE = "store reset"
+const NUKE_PHRASE = "reset everything"
 
 export function DangerZoneSection() {
   const [invEnabled, setInvEnabled] = useState(false)
@@ -21,12 +22,16 @@ export function DangerZoneSection() {
   const [ordersEnabled, setOrdersEnabled] = useState(false)
   const [custEnabled, setCustEnabled] = useState(false)
   const [custMode, setCustMode] = useState<"accounts" | "identities">("accounts")
+  const [acctEnabled, setAcctEnabled] = useState(false)
+  const [everything, setEverything] = useState(false)
   const [confirmText, setConfirmText] = useState("")
   const [busy, setBusy] = useState(false)
   const [promptOpen, setPromptOpen] = useState(false)
 
-  const anySelected = invEnabled || ordersEnabled || custEnabled
-  const confirmOk = confirmText.trim() === CONFIRM_PHRASE
+  // "Everything" swallows the individual choices, and demands a phrase of its own.
+  const phrase = everything ? NUKE_PHRASE : CONFIRM_PHRASE
+  const anySelected = everything || invEnabled || ordersEnabled || custEnabled || acctEnabled
+  const confirmOk = confirmText.trim() === phrase
   const canRun = anySelected && confirmOk && !busy
 
   const run = async () => {
@@ -37,7 +42,9 @@ export function DangerZoneSection() {
         {
           method: "POST",
           body: JSON.stringify({
-            confirm: CONFIRM_PHRASE,
+            confirm: phrase,
+            everything,
+            accounting: acctEnabled,
             inventory: invEnabled ? { enabled: true, value: Number(invValue) } : undefined,
             orders: ordersEnabled,
             customers: custEnabled ? { enabled: true, identities: custMode === "identities" } : undefined,
@@ -45,9 +52,11 @@ export function DangerZoneSection() {
         }
       )
       const parts: string[] = []
-      if (result.summary?.inventory) parts.push(`inventory → ${result.summary.inventory.set_to} (${result.summary.inventory.levels_updated} levels)`)
+      if (result.summary?.inventory) parts.push(`inventory → ${result.summary.inventory.set_to} (${result.summary.inventory.levels_updated} levels, ${result.summary.inventory.batches_deleted} batches)`)
+      if (result.summary?.accounting) parts.push(`${result.summary.accounting.ledger_entries} ledger entries`)
       if (result.summary?.orders) parts.push(`${result.summary.orders.orders} orders, ${result.summary.orders.carts} carts`)
       if (result.summary?.customers) parts.push(`${result.summary.customers.customers} customers`)
+      if (result.summary?.products) parts.push(`${result.summary.products.products} products`)
       if (result.success) {
         toast.success(`Store reset complete — ${parts.join("; ") || "nothing to reset"}`)
       } else {
@@ -133,16 +142,43 @@ export function DangerZoneSection() {
           )}
         </div>
 
+        {/* Accounting */}
+        <div className="flex items-center justify-between border-t border-ui-border-base pt-4">
+          <div>
+            <Text size="small" weight="plus">Reset accounting &amp; stock</Text>
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Deletes the cash book, fixed assets, marketing spend, partners and every FIFO cost
+              batch — and sets stock to 0, because the books and the shelf have to move together.
+              Packaging presets are kept.
+            </Text>
+          </div>
+          <Switch checked={acctEnabled} onCheckedChange={setAcctEnabled} disabled={busy || everything} />
+        </div>
+
+        {/* Everything */}
+        <div className="flex items-center justify-between border-t border-ui-tag-red-border pt-4">
+          <div>
+            <Text size="small" weight="plus" className="text-ui-tag-red-text">
+              Reset EVERYTHING (including products)
+            </Text>
+            <Text size="xsmall" className="text-ui-fg-muted">
+              All of the above plus every product and variant. Categories, collections, brands,
+              settings, users and roles are kept. Requires a different confirmation phrase.
+            </Text>
+          </div>
+          <Switch checked={everything} onCheckedChange={setEverything} disabled={busy} />
+        </div>
+
         {/* Confirm */}
         <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
           <Label htmlFor="reset-confirm">
-            Type <span className="font-mono text-ui-fg-base">store reset</span> to enable the button
+            Type <span className="font-mono text-ui-fg-base">{phrase}</span> to enable the button
           </Label>
           <Input
             id="reset-confirm"
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
-            placeholder="store reset"
+            placeholder={phrase}
             autoComplete="off"
             disabled={busy}
           />
@@ -150,7 +186,7 @@ export function DangerZoneSection() {
 
         <div className="flex justify-end">
           <Button variant="danger" disabled={!canRun} isLoading={busy} onClick={() => setPromptOpen(true)}>
-            Hard reset store
+            {everything ? "Reset everything" : "Hard reset store"}
           </Button>
         </div>
       </div>
@@ -158,13 +194,26 @@ export function DangerZoneSection() {
       <Prompt open={promptOpen} onOpenChange={setPromptOpen} variant="danger">
         <Prompt.Content>
           <Prompt.Header>
-            <Prompt.Title>Reset the store?</Prompt.Title>
+            <Prompt.Title>
+              {everything ? "Erase the entire store?" : "Reset the store?"}
+            </Prompt.Title>
             <Prompt.Description>
-              This permanently clears the selected data
-              {invEnabled ? ` · inventory → ${invValue}` : ""}
-              {ordersEnabled ? " · orders & sales" : ""}
-              {custEnabled ? ` · customers${custMode === "identities" ? " + logins" : ""}` : ""}
-              . This cannot be undone from the admin.
+              {everything ? (
+                <>
+                  This deletes <b>every product</b>, all orders, customers, stock and the entire
+                  cash book. Only categories, collections, brands, settings and users survive.
+                  There is no undo.
+                </>
+              ) : (
+                <>
+                  This permanently clears the selected data
+                  {acctEnabled ? " · accounting + stock → 0" : ""}
+                  {invEnabled && !acctEnabled ? ` · inventory → ${invValue}` : ""}
+                  {ordersEnabled ? " · orders & sales" : ""}
+                  {custEnabled ? ` · customers${custMode === "identities" ? " + logins" : ""}` : ""}
+                  . This cannot be undone from the admin.
+                </>
+              )}
             </Prompt.Description>
           </Prompt.Header>
           <Prompt.Footer>

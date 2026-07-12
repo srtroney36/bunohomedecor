@@ -50,6 +50,11 @@ export const accountingMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     middlewares: [validateAndTransformBody(V.CreateLedgerEntrySchema)],
   },
+  {
+    matcher: "/admin/accounting/ledger/:id",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(V.UpdateLedgerEntrySchema)],
+  },
 
   // partners
   {

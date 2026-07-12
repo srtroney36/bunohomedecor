@@ -1,6 +1,4 @@
-﻿import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { SquaresPlus } from "@medusajs/icons"
-import {
+﻿import {
   Button,
   Container,
   Input,
@@ -475,10 +473,6 @@ const ProductCardsPage = () => {
   )
 }
 
-export const config = defineRouteConfig({
-  label: "Product Cards",
-  rank: 3,
-  icon: SquaresPlus,
-})
-
+// No route config on purpose: this is now a tab inside Store Settings rather than its own
+// sidebar entry. The page still renders at /app/product-cards if you link to it directly.
 export default ProductCardsPage
