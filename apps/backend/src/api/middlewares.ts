@@ -1,6 +1,7 @@
 import { defineMiddlewares, validateAndTransformBody } from "@medusajs/framework/http"
 import multer from "multer"
 import { accountingMiddlewares } from "./admin/accounting/middlewares"
+import { variantStockMiddlewares } from "./admin/variant-stock/middlewares"
 import { rbacGuard } from "./rbac-guard"
 import {
   CreateRoleSchema,
@@ -46,4 +47,6 @@ export default defineMiddlewares([
   },
   // Accounting & marketing validation. The rbacGuard above still gates every one of these.
   ...accountingMiddlewares,
+  // Product-page stock endpoints (restock/adjust/edit from the product widget).
+  ...variantStockMiddlewares,
 ])

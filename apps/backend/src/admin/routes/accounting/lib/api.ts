@@ -96,6 +96,30 @@ export type MarketingSummary = {
   count: number
 }
 
+export type Batch = {
+  id: string
+  variant_id: string
+  label: string
+  sku: string | null
+  received_date: string
+  source: "restock" | "found" | "opening"
+  supplier: string | null
+  note: string | null
+  qty_received: number
+  unit_cost: number
+  freight_total: number
+  landed_unit_cost: number
+  total_value: number
+  cash_paid: number
+  sold: number
+  remaining: number
+  depleted_at: string | null
+  currency_code: string
+  ledger_entry_id: string | null
+}
+
+export type BatchesResponse = { batches: Batch[] }
+
 export type Dashboard = {
   currency_code: string
   variants_missing_cost: number
@@ -134,6 +158,7 @@ export type Dashboard = {
     other_expense: number
     refund: number
     packaging_used: number
+    inventory_adjustments: number
     operating_expenses: number
     net_profit: number
     net_margin_pct: number
@@ -187,6 +212,17 @@ export const api = {
     ),
   restock: (body: unknown) =>
     rbacFetch(`/accounting/restock`, { method: "POST", body: JSON.stringify(body) }),
+
+  batches: (variantId?: string) =>
+    rbacFetch<BatchesResponse>(
+      `/accounting/batches${variantId ? `?variant_id=${encodeURIComponent(variantId)}` : ""}`
+    ),
+  adjustStock: (body: unknown) =>
+    rbacFetch(`/accounting/adjust`, { method: "POST", body: JSON.stringify(body) }),
+  editBatch: (id: string, body: unknown) =>
+    rbacFetch(`/accounting/batches/${id}`, { method: "POST", body: JSON.stringify(body) }),
+  deleteBatch: (id: string) =>
+    rbacFetch(`/accounting/batches/${id}`, { method: "DELETE" }),
 
   marketing: (params: Record<string, string | number | undefined> = {}) => {
     const q = new URLSearchParams()

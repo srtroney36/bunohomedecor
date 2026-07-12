@@ -132,14 +132,45 @@ export const RestockSchema = z
     quantity: z.coerce.number().int().positive(),
     unit_cost: Money,
     freight: z.coerce.number().finite().min(0).default(0),
-    // Repoint the variant's cost price to this restock's landed unit cost.
-    update_cost: z.coerce.boolean().default(false),
     purchase_date: D.optional(),
     supplier: z.string().max(200).nullish(),
     note: z.string().max(500).nullish(),
   })
   .strict()
 export type RestockSchema = z.infer<typeof RestockSchema>
+
+export const GetBatchesSchema = z.object({
+  variant_id: z.string().optional(),
+})
+export type GetBatchesSchema = z.infer<typeof GetBatchesSchema>
+
+/** A non-sale stock change. `found` adds a cost layer; `shrinkage` writes stock off. */
+export const AdjustStockSchema = z
+  .object({
+    variant_id: z.string().min(1),
+    direction: z.enum(["found", "shrinkage"]),
+    quantity: z.coerce.number().int().positive(),
+    // Found only: the cost to attach to the new layer. Defaults to 0 (genuinely free/found).
+    unit_cost: z.coerce.number().finite().min(0).default(0),
+    date: D.optional(),
+    reason: z.enum(["shrinkage", "damage", "correction"]).optional(),
+    note: z.string().max(500).nullish(),
+  })
+  .strict()
+export type AdjustStockSchema = z.infer<typeof AdjustStockSchema>
+
+/** Edit a batch. Every field optional — omitted fields keep their current value. */
+export const EditBatchSchema = z
+  .object({
+    unit_cost: z.coerce.number().finite().min(0).optional(),
+    freight_total: z.coerce.number().finite().min(0).optional(),
+    qty_received: z.coerce.number().int().positive().optional(),
+    received_date: D.optional(),
+    supplier: z.string().max(200).nullish(),
+    note: z.string().max(500).nullish(),
+  })
+  .strict()
+export type EditBatchSchema = z.infer<typeof EditBatchSchema>
 
 /* ------------------------------------ dashboard ------------------------------------ */
 

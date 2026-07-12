@@ -1,98 +1,68 @@
 import { defineWidgetConfig } from "@medusajs/admin-sdk"
-import { Button, Container, Heading, Input, Text, toast } from "@medusajs/ui"
+import { Button, Container, Heading, Input, Label, Text, toast } from "@medusajs/ui"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 
-async function adminFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const token =
-    localStorage.getItem("_medusa_auth_token") ||
-    localStorage.getItem("medusa_auth_token") ||
-    ""
+import { money } from "../lib/kpi"
+import { stockApi } from "../lib/stock-api"
+import { VariantStockPanel } from "./variant-stock-panel"
 
-  const res = await fetch(`/admin${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-  })
-
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  return res.json() as Promise<T>
-}
-
-type Row = {
-  variant_id: string
-  title: string
-  sku: string | null
-  cost: string
-  packaging_cost: string
-}
+/**
+ * Product-page stock, cost & packaging.
+ *
+ * Cost is no longer typed here — it is the landed cost of the variant's LATEST batch, shown
+ * read-only. You set cost by restocking (each batch carries its own cost); this just reflects
+ * the most recent one. Packaging stays an editable per-variant preset. Below each variant is
+ * the full restock / found / write-off panel with its FIFO batch log.
+ */
+const cur = "bdt"
 
 const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
-  const [rows, setRows] = useState<Row[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const qc = useQueryClient()
 
+  const { data, isLoading } = useQuery({
+    queryKey: ["variant-costs", product.id],
+    queryFn: () => stockApi.listCosts(product.id),
+  })
+
+  // Editable packaging preset per variant (variant_id -> string).
+  const [packaging, setPackaging] = useState<Record<string, string>>({})
   useEffect(() => {
-    adminFetch<{
-      variant_costs: {
-        variant_id: string
-        title: string
-        sku: string | null
-        cost: number
-        packaging_cost: number
-      }[]
-    }>(`/variant-costs?product_id=${product.id}`)
-      .then(({ variant_costs }) =>
-        setRows(
-          variant_costs.map((v) => ({
-            ...v,
-            cost: String(v.cost ?? 0),
-            packaging_cost: String(v.packaging_cost ?? 0),
-          }))
-        )
-      )
-      .catch(() => toast.error("Failed to load cost prices"))
-      .finally(() => setLoading(false))
-  }, [product.id])
+    if (!data) return
+    const init: Record<string, string> = {}
+    for (const v of data.variant_costs) init[v.variant_id] = String(v.packaging_cost ?? 0)
+    setPackaging(init)
+  }, [data])
 
-  const setField = (variant_id: string, field: "cost" | "packaging_cost", value: string) =>
-    setRows((rs) => rs.map((r) => (r.variant_id === variant_id ? { ...r, [field]: value } : r)))
+  const rows = data?.variant_costs ?? []
 
-  const save = async () => {
-    setSaving(true)
-    try {
-      await adminFetch("/variant-costs", {
-        method: "POST",
-        body: JSON.stringify({
-          costs: rows.map((r) => ({
-            variant_id: r.variant_id,
-            cost: Number(r.cost) || 0,
-            packaging_cost: Number(r.packaging_cost) || 0,
-          })),
-        }),
-      })
-      toast.success("Costs saved")
-    } catch {
-      toast.error("Failed to save costs")
-    } finally {
-      setSaving(false)
-    }
-  }
+  const save = useMutation({
+    mutationFn: () =>
+      stockApi.saveCosts({
+        costs: rows.map((v) => ({
+          variant_id: v.variant_id,
+          packaging_cost: Number(packaging[v.variant_id]) || 0,
+        })),
+      }),
+    onSuccess: () => {
+      toast.success("Packaging saved")
+      qc.invalidateQueries({ queryKey: ["variant-costs"] })
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
 
   return (
-    <Container className="px-6 py-6 flex flex-col gap-y-4">
+    <Container className="flex flex-col gap-y-5 px-6 py-6">
       <div>
-        <Heading level="h2">Cost &amp; Packaging</Heading>
+        <Heading level="h2">Stock, cost &amp; packaging</Heading>
         <Text size="small" className="text-ui-fg-subtle mt-1">
-          <b>Cost</b> is what the item costs you (drives profit &amp; margin).{" "}
-          <b>Packaging</b> is the per-unit preset drawn from the packaging pool each time a unit
-          ships. Use the same currency as your selling prices.
+          <b>Cost</b> is set per batch when you restock — the figure shown is your latest
+          batch's landed cost. <b>Packaging</b> is the per-unit preset drawn from the packaging
+          pool on each shipment. Sales draw down the oldest batch first (FIFO).
         </Text>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <Text size="small" className="text-ui-fg-muted">
           Loading…
         </Text>
@@ -101,54 +71,58 @@ const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
           No variants on this product.
         </Text>
       ) : (
-        <div className="flex flex-col gap-y-2">
-          <div className="flex items-center gap-3">
-            <div className="flex-1" />
-            <Text size="xsmall" className="w-32 text-ui-fg-muted">
-              Cost / unit
-            </Text>
-            <Text size="xsmall" className="w-32 text-ui-fg-muted">
-              Packaging / unit
-            </Text>
-          </div>
-          {rows.map((r) => (
-            <div key={r.variant_id} className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <Text size="small" className="truncate">
-                  {r.title}
-                </Text>
-                {r.sku && (
-                  <Text size="xsmall" className="text-ui-fg-muted truncate">
-                    {r.sku}
+        <div className="flex flex-col gap-y-6">
+          {rows.map((v) => (
+            <div
+              key={v.variant_id}
+              className="flex flex-col gap-y-3 border-t border-ui-border-base pt-5 first:border-t-0 first:pt-0"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <Text size="small" weight="plus" className="truncate">
+                    {v.title}
                   </Text>
-                )}
+                  {v.sku && (
+                    <Text size="xsmall" className="text-ui-fg-muted truncate">
+                      {v.sku}
+                    </Text>
+                  )}
+                </div>
+                <div className="flex items-end gap-4">
+                  <div className="flex flex-col gap-y-1">
+                    <Label size="small" className="text-ui-fg-muted">
+                      Cost / unit (last batch)
+                    </Label>
+                    <Text size="small" className="text-right font-medium tabular-nums">
+                      {money(v.cost, cur)}
+                    </Text>
+                  </div>
+                  <div className="flex flex-col gap-y-1">
+                    <Label size="small">Packaging / unit</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="w-28"
+                      value={packaging[v.variant_id] ?? ""}
+                      onChange={(e) =>
+                        setPackaging((p) => ({ ...p, [v.variant_id]: e.target.value }))
+                      }
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
               </div>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                className="w-32"
-                value={r.cost}
-                onChange={(e) => setField(r.variant_id, "cost", e.target.value)}
-                placeholder="0"
-              />
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                className="w-32"
-                value={r.packaging_cost}
-                onChange={(e) => setField(r.variant_id, "packaging_cost", e.target.value)}
-                placeholder="0"
-              />
+
+              <VariantStockPanel variantId={v.variant_id} cur={cur} />
             </div>
           ))}
         </div>
       )}
 
       <div className="flex justify-end">
-        <Button size="small" onClick={save} isLoading={saving} disabled={loading || saving}>
-          Save
+        <Button size="small" onClick={() => save.mutate()} isLoading={save.isPending} disabled={isLoading}>
+          Save packaging
         </Button>
       </div>
     </Container>

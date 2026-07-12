@@ -29,6 +29,7 @@ const SEGMENT_ALIASES: Record<string, string> = {
   pricing: "price_lists",
   brands: "brands",
   "variant-costs": "product_cost",
+  "variant-stock": "product_cost",
   // Orders & fulfillment
   orders: "orders",
   "quick-orders": "orders",

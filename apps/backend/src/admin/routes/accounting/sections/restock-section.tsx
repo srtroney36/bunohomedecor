@@ -1,14 +1,18 @@
 import { Spinner } from "@medusajs/icons"
 import {
+  Badge,
   Button,
   DatePicker,
   Input,
   Label,
-  Switch,
+  Select,
   Table,
   Text,
+  Textarea,
   toast,
 } from "@medusajs/ui"
+
+import { BatchActions } from "./batch-actions"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 
@@ -23,12 +27,15 @@ export function RestockSection() {
   const [picked, setPicked] = useState<Picked | null>(null)
 
   // form state
+  type Mode = "restock" | "found" | "shrinkage"
+  const [mode, setMode] = useState<Mode>("restock")
   const [quantity, setQuantity] = useState("")
   const [unitCost, setUnitCost] = useState("")
   const [freight, setFreight] = useState("0")
-  const [updateCost, setUpdateCost] = useState(true)
   const [date, setDate] = useState<Date>(new Date())
   const [supplier, setSupplier] = useState("")
+  const [reason, setReason] = useState<"shrinkage" | "damage" | "correction">("shrinkage")
+  const [note, setNote] = useState("")
 
   const { data: results, isFetching } = useQuery({
     queryKey: ["accounting", "variants", search],
@@ -36,10 +43,10 @@ export function RestockSection() {
     enabled: !picked, // stop searching once a variant is chosen
   })
 
-  // Recent restocks are just the inventory_purchase ledger rows.
-  const { data: recent } = useQuery({
-    queryKey: ["accounting", "ledger", "inventory_purchase"],
-    queryFn: () => api.ledger({ category: "inventory_purchase", limit: 20 }),
+  // Every FIFO cost layer, newest first — with how far each has sold down.
+  const { data: batchData } = useQuery({
+    queryKey: ["accounting", "batches"],
+    queryFn: () => api.batches(),
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["accounting"] })
@@ -49,32 +56,63 @@ export function RestockSection() {
   const freightNum = Number(freight) || 0
   const cashOut = qtyNum > 0 && unitNum > 0 ? qtyNum * unitNum + freightNum : 0
   const landed = qtyNum > 0 ? cashOut / qtyNum : 0
-  const valid = !!picked && qtyNum > 0 && unitNum > 0
+  const valid =
+    !!picked &&
+    qtyNum > 0 &&
+    (mode === "shrinkage" ? true : mode === "found" ? unitNum >= 0 : unitNum > 0)
 
   const reset = () => {
     setPicked(null)
     setSearch("")
+    setMode("restock")
     setQuantity("")
     setUnitCost("")
     setFreight("0")
-    setUpdateCost(true)
     setSupplier("")
+    setReason("shrinkage")
+    setNote("")
     setDate(new Date())
   }
 
   const submit = useMutation({
-    mutationFn: () =>
-      api.restock({
+    mutationFn: () => {
+      if (mode === "restock") {
+        return api.restock({
+          variant_id: picked!.variant_id,
+          quantity: qtyNum,
+          unit_cost: unitNum,
+          freight: freightNum,
+          purchase_date: date.toISOString(),
+          supplier: supplier || null,
+        })
+      }
+      if (mode === "found") {
+        return api.adjustStock({
+          variant_id: picked!.variant_id,
+          direction: "found",
+          quantity: qtyNum,
+          unit_cost: unitNum || 0,
+          date: date.toISOString(),
+          note: note || null,
+        })
+      }
+      return api.adjustStock({
         variant_id: picked!.variant_id,
+        direction: "shrinkage",
         quantity: qtyNum,
-        unit_cost: unitNum,
-        freight: freightNum,
-        update_cost: updateCost,
-        purchase_date: date.toISOString(),
-        supplier: supplier || null,
-      }),
+        date: date.toISOString(),
+        reason,
+        note: note || null,
+      })
+    },
     onSuccess: () => {
-      toast.success("Restocked — stock raised and cash recorded")
+      toast.success(
+        mode === "restock"
+          ? "Restocked — stock raised, batch recorded, cash booked"
+          : mode === "found"
+            ? "Found stock added — new cost layer, no cash moved"
+            : "Written off — stock lowered, booked as a non-cash loss"
+      )
       invalidate()
       reset()
     },
@@ -87,7 +125,7 @@ export function RestockSection() {
   }
 
   const cur = "bdt"
-  const rows = useMemo(() => recent?.ledger_entries ?? [], [recent])
+  const batches = useMemo(() => batchData?.batches ?? [], [batchData])
 
   return (
     <div className="flex flex-col gap-y-4">
@@ -160,9 +198,22 @@ export function RestockSection() {
             </Button>
           </div>
 
+          <div className="flex gap-2">
+            {(["restock", "found", "shrinkage"] as Mode[]).map((m) => (
+              <Button
+                key={m}
+                size="small"
+                variant={mode === m ? "primary" : "secondary"}
+                onClick={() => setMode(m)}
+              >
+                {m === "restock" ? "Restock" : m === "found" ? "Found stock" : "Write off"}
+              </Button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-y-1">
-              <Label size="small">Quantity received</Label>
+              <Label size="small">Quantity</Label>
               <Input
                 type="number"
                 min="1"
@@ -172,49 +223,84 @@ export function RestockSection() {
                 placeholder="0"
               />
             </div>
+            {mode !== "shrinkage" && (
+              <div className="flex flex-col gap-y-1">
+                <Label size="small">Cost per unit (BDT)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            )}
+            {mode === "restock" && (
+              <div className="flex flex-col gap-y-1">
+                <Label size="small">Freight / extra (BDT)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={freight}
+                  onChange={(e) => setFreight(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            )}
+            {mode === "shrinkage" && (
+              <div className="flex flex-col gap-y-1">
+                <Label size="small">Reason</Label>
+                <Select value={reason} onValueChange={(v) => setReason(v as typeof reason)}>
+                  <Select.Trigger>
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Content>
+                    <Select.Item value="shrinkage">Shrinkage / lost</Select.Item>
+                    <Select.Item value="damage">Damaged</Select.Item>
+                    <Select.Item value="correction">Count correction</Select.Item>
+                  </Select.Content>
+                </Select>
+              </div>
+            )}
             <div className="flex flex-col gap-y-1">
-              <Label size="small">Cost per unit (BDT)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={unitCost}
-                onChange={(e) => setUnitCost(e.target.value)}
-                placeholder="0"
-              />
-            </div>
-            <div className="flex flex-col gap-y-1">
-              <Label size="small">Freight / extra (BDT)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={freight}
-                onChange={(e) => setFreight(e.target.value)}
-                placeholder="0"
-              />
-            </div>
-            <div className="flex flex-col gap-y-1">
-              <Label size="small">Purchase date</Label>
+              <Label size="small">Date</Label>
               <DatePicker value={date} onChange={(d) => d && setDate(d)} />
             </div>
           </div>
 
-          <div className="flex flex-col gap-y-1">
-            <Label size="small">Supplier (optional)</Label>
-            <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} />
-          </div>
-
-          <div className="flex items-center gap-x-2">
-            <Switch checked={updateCost} onCheckedChange={setUpdateCost} id="upd-cost" />
-            <Label size="small" htmlFor="upd-cost">
-              Update this product's cost price to {money(landed, cur)} / unit (landed)
-            </Label>
-          </div>
+          {mode === "restock" ? (
+            <div className="flex flex-col gap-y-1">
+              <Label size="small">Supplier (optional)</Label>
+              <Input value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-y-1">
+              <Label size="small">Note (optional)</Label>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+          )}
 
           <div className="flex items-center justify-between rounded-lg bg-ui-bg-subtle p-3">
             <Text size="small" className="text-ui-fg-subtle">
-              Cash out: <b>{money(cashOut, cur)}</b> · Stock: <b>+{qtyNum || 0}</b>
+              {mode === "restock" && (
+                <>
+                  Cash out: <b>{money(cashOut, cur)}</b> · Stock: <b>+{qtyNum || 0}</b> · Landed:{" "}
+                  <b>{money(landed, cur)}</b>/unit
+                </>
+              )}
+              {mode === "found" && (
+                <>
+                  Stock: <b>+{qtyNum || 0}</b> · New layer @ <b>{money(unitNum || 0, cur)}</b>/unit ·
+                  no cash
+                </>
+              )}
+              {mode === "shrinkage" && (
+                <>
+                  Stock: <b>−{qtyNum || 0}</b> · booked as a non-cash loss at FIFO cost
+                </>
+              )}
             </Text>
             <Button
               size="small"
@@ -222,45 +308,77 @@ export function RestockSection() {
               isLoading={submit.isPending}
               onClick={() => submit.mutate()}
             >
-              Restock
+              {mode === "restock" ? "Restock" : mode === "found" ? "Add found stock" : "Write off"}
             </Button>
           </div>
         </div>
       )}
 
       <Text size="small" weight="plus" className="mt-2 text-ui-fg-subtle">
-        Recent restocks
+        Stock batches (FIFO cost layers)
       </Text>
       <div className="overflow-x-auto rounded-lg border border-ui-border-base">
         <Table>
           <Table.Header>
             <Table.Row>
               <Table.HeaderCell>Date</Table.HeaderCell>
-              <Table.HeaderCell>What</Table.HeaderCell>
+              <Table.HeaderCell>Product</Table.HeaderCell>
+              <Table.HeaderCell className="text-right">Received</Table.HeaderCell>
+              <Table.HeaderCell className="text-right">Landed / unit</Table.HeaderCell>
               <Table.HeaderCell className="text-right">Cash paid</Table.HeaderCell>
+              <Table.HeaderCell>Status</Table.HeaderCell>
+              <Table.HeaderCell />
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {rows.map((e) => (
-              <Table.Row key={e.id}>
+            {batches.map((b) => (
+              <Table.Row key={b.id}>
                 <Table.Cell className="whitespace-nowrap">
-                  {new Date(e.entry_date).toLocaleDateString("en-US", {
+                  {new Date(b.received_date).toLocaleDateString("en-US", {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
                   })}
                 </Table.Cell>
-                <Table.Cell className="max-w-[320px] truncate">
-                  {e.description || "Restock"}
+                <Table.Cell className="max-w-[260px]">
+                  <div className="truncate">{b.label}</div>
+                  {b.source !== "restock" && (
+                    <Badge size="2xsmall" color="orange" className="mt-1">
+                      {b.source}
+                    </Badge>
+                  )}
                 </Table.Cell>
-                <Table.Cell className="text-right font-medium">{money(e.amount, cur)}</Table.Cell>
+                <Table.Cell className="text-right">{b.qty_received}</Table.Cell>
+                <Table.Cell className="text-right">{money(b.landed_unit_cost, cur)}</Table.Cell>
+                <Table.Cell className="text-right font-medium">
+                  {b.cash_paid ? money(b.cash_paid, cur) : "—"}
+                </Table.Cell>
+                <Table.Cell className="whitespace-nowrap">
+                  {b.remaining <= 0 ? (
+                    <Badge size="2xsmall" color="grey">
+                      Sold out ({b.sold}/{b.qty_received})
+                    </Badge>
+                  ) : (
+                    <Badge size="2xsmall" color="green">
+                      {b.remaining} left ({b.sold}/{b.qty_received} sold)
+                    </Badge>
+                  )}
+                </Table.Cell>
+                <Table.Cell className="text-right">
+                  <BatchActions
+                    batch={b}
+                    onChanged={invalidate}
+                    onEdit={api.editBatch}
+                    onDelete={api.deleteBatch}
+                  />
+                </Table.Cell>
               </Table.Row>
             ))}
-            {rows.length === 0 && (
+            {batches.length === 0 && (
               <Table.Row>
-                <Table.Cell colSpan={3}>
+                <Table.Cell colSpan={7}>
                   <Text size="small" className="py-4 text-ui-fg-muted">
-                    No restocks recorded yet.
+                    No stock batches recorded yet.
                   </Text>
                 </Table.Cell>
               </Table.Row>

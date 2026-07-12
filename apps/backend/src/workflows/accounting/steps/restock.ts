@@ -143,43 +143,77 @@ export const bookRestockCashStep = createStep(
 )
 
 /**
- * Optionally repoint a variant's cost price to what this restock actually cost per unit
- * (landed: goods + freight). Only runs when the restock asks for it.
+ * Records the restock as a FIFO cost LAYER (stock_batch) instead of overwriting one flat
+ * cost. Each batch keeps its own landed unit cost, so a later sale can be costed against the
+ * batch it actually drew from.
+ *
+ * It also refreshes the `variant_cost.cost` display cache to this batch's landed cost — that
+ * column is no longer the COGS basis, just the "latest cost" shown on the product page and
+ * prefilled into the restock form.
  */
-export type UpdateVariantCostInput = { variant_id: string; cost: number }
-
-type CostCompensation = {
-  deleteId?: string
-  restore?: { id: string; cost: number }
+export type CreateStockBatchInput = {
+  variant_id: string
+  inventory_item_id?: string | null
+  received_date: Date
+  qty_received: number
+  unit_cost: number
+  freight_total: number
+  landed_unit_cost: number
+  currency_code?: string
+  source?: "restock" | "found" | "opening"
+  supplier?: string | null
+  note?: string | null
+  ledger_entry_id?: string | null
 }
 
-export const updateVariantCostStep = createStep(
-  "update-variant-cost",
-  async (input: UpdateVariantCostInput, { container }: { container: MedusaContainer }) => {
-    const svc: any = container.resolve(PRODUCT_COST_MODULE)
-    const [existing] = await svc.listVariantCosts({ variant_id: input.variant_id })
+type BatchCompensation = {
+  batch_id: string
+  prevCost?: { id: string; cost: number }
+  createdCostId?: string
+}
 
+export const createStockBatchStep = createStep(
+  "create-stock-batch",
+  async (input: CreateStockBatchInput, { container }: { container: MedusaContainer }) => {
+    const svc: any = container.resolve(PRODUCT_COST_MODULE)
+
+    const [batch] = await svc.createStockBatches([
+      {
+        variant_id: input.variant_id,
+        inventory_item_id: input.inventory_item_id ?? null,
+        received_date: input.received_date,
+        qty_received: input.qty_received,
+        unit_cost: input.unit_cost,
+        freight_total: input.freight_total,
+        landed_unit_cost: input.landed_unit_cost,
+        currency_code: input.currency_code ?? "bdt",
+        source: input.source ?? "restock",
+        supplier: input.supplier ?? null,
+        note: input.note ?? null,
+        ledger_entry_id: input.ledger_entry_id ?? null,
+      },
+    ])
+
+    // Refresh the latest-cost display cache without touching packaging_cost.
+    const comp: BatchCompensation = { batch_id: batch.id }
+    const [existing] = await svc.listVariantCosts({ variant_id: input.variant_id })
     if (existing) {
-      const before = Number(existing.cost)
-      await svc.updateVariantCosts([{ id: existing.id, cost: input.cost }])
-      return new StepResponse<{ id: string }, CostCompensation>(
-        { id: existing.id },
-        { restore: { id: existing.id, cost: before } }
-      )
+      comp.prevCost = { id: existing.id, cost: Number(existing.cost) }
+      await svc.updateVariantCosts([{ id: existing.id, cost: input.landed_unit_cost }])
+    } else {
+      const [created] = await svc.createVariantCosts([
+        { variant_id: input.variant_id, cost: input.landed_unit_cost },
+      ])
+      comp.createdCostId = created.id
     }
 
-    const [created] = await svc.createVariantCosts([
-      { variant_id: input.variant_id, cost: input.cost },
-    ])
-    return new StepResponse<{ id: string }, CostCompensation>(
-      { id: created.id },
-      { deleteId: created.id }
-    )
+    return new StepResponse<{ id: string }, BatchCompensation>({ id: batch.id }, comp)
   },
-  async (comp: CostCompensation | undefined, { container }) => {
+  async (comp: BatchCompensation | undefined, { container }) => {
     if (!comp) return
     const svc: any = container.resolve(PRODUCT_COST_MODULE)
-    if (comp.deleteId) await svc.deleteVariantCosts([comp.deleteId])
-    else if (comp.restore) await svc.updateVariantCosts([comp.restore])
+    await svc.deleteStockBatches([comp.batch_id])
+    if (comp.prevCost) await svc.updateVariantCosts([comp.prevCost])
+    else if (comp.createdCostId) await svc.deleteVariantCosts([comp.createdCostId])
   }
 )

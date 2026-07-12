@@ -12,9 +12,16 @@ import {
 } from "./steps/ledger-entry"
 import {
   bookRestockCashStep,
+  createStockBatchStep,
   receiveStockStep,
-  updateVariantCostStep,
 } from "./steps/restock"
+import {
+  adjustStockLevelStep,
+  createStockMovementStep,
+  deleteBatchStep,
+  editBatchStep,
+  type EditBatchInput,
+} from "./steps/stock-adjust"
 import {
   createPartnerStep,
   deletePartnerStep,
@@ -46,22 +53,22 @@ export type RestockInput = {
   quantity: number
   unit_cost: number
   freight?: number
-  update_cost?: boolean
   purchase_date?: Date
   supplier?: string | null
   note?: string | null
 }
 
 /**
- * The one-step restock: goods in AND cash out, together.
+ * The one-step restock: goods in, cash out, AND a FIFO cost layer, together.
  *
  * 1. Raise the ecommerce stock for the variant.
  * 2. Book the cash paid (goods + freight) as an `inventory_purchase` — an ASSET, so net
  *    worth stays flat: cash went down, but inventory value went up by the same amount.
- * 3. Optionally repoint the cost price to this restock's landed unit cost.
+ * 3. Record a `stock_batch` at this restock's landed unit cost, linked to the cash row, so
+ *    later sales are costed FIFO against the batch they actually drew from.
  *
- * This is what stops the two halves from drifting: you can't receive stock and forget the
- * cash, or record cash for goods you never received.
+ * All three compensate together: you can't receive stock and forget the cash, book cash for
+ * goods you never received, or end up with a cash row and no batch backing it.
  */
 export const restockWorkflow = createWorkflow(
   "restock",
@@ -81,20 +88,118 @@ export const restockWorkflow = createWorkflow(
         reference: input.supplier ?? null,
       }
     })
-    bookRestockCashStep(ledgerInput)
+    const ledger = bookRestockCashStep(ledgerInput)
 
-    when({ input }, ({ input }) => !!input.update_cost).then(() => {
-      const costInput = transform({ input }, ({ input }) => {
-        const cashOut = Number(input.unit_cost) * Number(input.quantity) + Number(input.freight || 0)
+    const batchInput = transform(
+      { input, received, ledger },
+      ({ input, received, ledger }) => {
+        const qty = Number(input.quantity)
+        const cashOut = Number(input.unit_cost) * qty + Number(input.freight || 0)
         return {
           variant_id: input.variant_id,
-          cost: Number(input.quantity) > 0 ? cashOut / Number(input.quantity) : Number(input.unit_cost),
+          inventory_item_id: received.item_id,
+          received_date: input.purchase_date ?? new Date(),
+          qty_received: qty,
+          unit_cost: Number(input.unit_cost),
+          freight_total: Number(input.freight || 0),
+          landed_unit_cost: qty > 0 ? cashOut / qty : Number(input.unit_cost),
+          supplier: input.supplier ?? null,
+          note: input.note ?? null,
+          source: "restock" as const,
+          ledger_entry_id: ledger.id,
         }
-      })
-      updateVariantCostStep(costInput)
-    })
+      }
+    )
+    createStockBatchStep(batchInput)
 
     return new WorkflowResponse(received)
+  }
+)
+
+/* ---------------------------------- stock adjust ----------------------------------- */
+
+export type AdjustStockInput = {
+  variant_id: string
+  /** `found` = positive correction (adds a cost layer, no cash). `shrinkage` = write-off. */
+  direction: "found" | "shrinkage"
+  quantity: number
+  unit_cost?: number // found only — the cost to attach to the new layer
+  date?: Date
+  reason?: "shrinkage" | "damage" | "correction" // shrinkage only
+  note?: string | null
+}
+
+/**
+ * A non-sale stock change. Neither branch moves cash: `found` just adds a cost layer the
+ * business turned out to already have, and `shrinkage` is a non-cash write-off that surfaces
+ * in the P&L as a derived figure (see the dashboard route), the same way packaging does.
+ */
+export const adjustStockWorkflow = createWorkflow(
+  "adjust-stock",
+  function (input: AdjustStockInput) {
+    when({ input }, ({ input }) => input.direction === "found").then(() => {
+      const received = receiveStockStep({
+        variant_id: input.variant_id,
+        quantity: input.quantity,
+      })
+      const batchInput = transform({ input, received }, ({ input, received }) => ({
+        variant_id: input.variant_id,
+        inventory_item_id: received.item_id,
+        received_date: input.date ?? new Date(),
+        qty_received: Number(input.quantity),
+        unit_cost: Number(input.unit_cost || 0),
+        freight_total: 0,
+        landed_unit_cost: Number(input.unit_cost || 0),
+        source: "found" as const,
+        note: input.note ?? null,
+        ledger_entry_id: null,
+      }))
+      createStockBatchStep(batchInput)
+    })
+
+    when({ input }, ({ input }) => input.direction === "shrinkage").then(() => {
+      const levelInput = transform({ input }, ({ input }) => ({
+        variant_id: input.variant_id,
+        delta: -Math.abs(Number(input.quantity)),
+      }))
+      adjustStockLevelStep(levelInput)
+
+      const movementInput = transform({ input }, ({ input }) => ({
+        variant_id: input.variant_id,
+        date: input.date ?? new Date(),
+        quantity: Math.abs(Number(input.quantity)),
+        reason: input.reason ?? ("shrinkage" as const),
+        note: input.note ?? null,
+      }))
+      createStockMovementStep(movementInput)
+    })
+
+    const result = transform({ input }, ({ input }) => ({
+      variant_id: input.variant_id,
+      direction: input.direction,
+    }))
+    return new WorkflowResponse(result)
+  }
+)
+
+/**
+ * Edit a batch — cost, freight, quantity, date, supplier or note — and let it propagate. See
+ * editBatchStep for why this is safe even after the batch has partly sold.
+ */
+export const editBatchWorkflow = createWorkflow(
+  "edit-batch",
+  function (input: EditBatchInput) {
+    const result = editBatchStep(input)
+    return new WorkflowResponse(result)
+  }
+)
+
+/** Delete an un-consumed batch, unwinding its stock and cash. */
+export const deleteBatchWorkflow = createWorkflow(
+  "delete-batch",
+  function (input: { id: string }) {
+    const result = deleteBatchStep(input)
+    return new WorkflowResponse(result)
   }
 )
 

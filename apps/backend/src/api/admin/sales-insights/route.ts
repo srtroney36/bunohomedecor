@@ -40,7 +40,10 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   // Packaging consumed by orders in the range is a real cost, derived from orders (not the
   // ledger), so it is added on top of the ledger expenses.
   const packagingUsed = base.metrics.packaging_used
-  const operatingExpenses = exp.total + packagingUsed
+  // Inventory written off in the range (shrinkage/damage), net of `found` stock — a non-cash
+  // cost from the FIFO replay, added alongside packaging.
+  const inventoryAdjustments = base.metrics.inventory_writeoff - base.metrics.inventory_found
+  const operatingExpenses = exp.total + packagingUsed + inventoryAdjustments
   const netProfit = base.metrics.gross_profit - operatingExpenses
 
   res.json({
@@ -58,6 +61,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
       other_expenses: exp.other_expense,
       refunds: exp.refund,
       packaging_used: packagingUsed,
+      inventory_adjustments: inventoryAdjustments,
       operating_expenses: operatingExpenses,
 
       net_profit: netProfit,

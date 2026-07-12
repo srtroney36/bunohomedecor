@@ -135,7 +135,7 @@ export function DashboardSection() {
           <Kpi
             label="Operating expenses"
             value={money(p.operating_expenses, cur)}
-            hint="Marketing + courier + other + refunds"
+            hint="Marketing + courier + other + refunds + packaging + write-offs"
             accent="red"
           />
           <Kpi

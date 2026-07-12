@@ -18,6 +18,21 @@ export const accountingMiddlewares: MiddlewareRoute[] = [
     method: ["POST"],
     middlewares: [validateAndTransformBody(V.RestockSchema)],
   },
+  {
+    matcher: "/admin/accounting/batches",
+    method: ["GET"],
+    middlewares: [validateAndTransformQuery(V.GetBatchesSchema, {})],
+  },
+  {
+    matcher: "/admin/accounting/batches/:id",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(V.EditBatchSchema)],
+  },
+  {
+    matcher: "/admin/accounting/adjust",
+    method: ["POST"],
+    middlewares: [validateAndTransformBody(V.AdjustStockSchema)],
+  },
 
   // ledger
   {

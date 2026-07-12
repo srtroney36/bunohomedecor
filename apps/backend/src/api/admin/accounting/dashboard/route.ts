@@ -90,8 +90,12 @@ export async function GET(
   // Packaging consumed by orders placed in the period is a real cost (the boxes are gone),
   // so it reduces net profit alongside the ledger expenses.
   const packaging_used_period = periodSales.metrics.packaging_used
+  // Inventory written off in the period (shrinkage/damage), net of any `found` stock. A
+  // non-cash P&L cost derived from the FIFO replay, exactly like packaging.
+  const inventory_adjustments =
+    periodSales.metrics.inventory_writeoff - periodSales.metrics.inventory_found
   const gross = periodSales.metrics.gross_profit
-  const operating_expenses = periodExpenses.total + packaging_used_period
+  const operating_expenses = periodExpenses.total + packaging_used_period + inventory_adjustments
   const net_profit = gross - operating_expenses
 
   res.json({
@@ -149,6 +153,7 @@ export async function GET(
       other_expense: periodExpenses.other_expense,
       refund: periodExpenses.refund,
       packaging_used: packaging_used_period,
+      inventory_adjustments,
       operating_expenses,
       net_profit,
       net_margin_pct:
