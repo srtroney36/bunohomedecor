@@ -41,12 +41,22 @@ export const LEDGER_CATEGORIES = [
   "courier_fee",
   "other_expense",
   "refund",
+
+  // Real P&L income that Medusa knows nothing about: a courier paying you back for a parcel
+  // they destroyed, scrap sales, supplier credits. Without this there is literally nowhere to
+  // put money that comes in but isn't a sale and isn't partner capital.
+  "other_income",
 ] as const
 
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number]
 
-/** equity = owner money. asset = cash became a thing you own. expense = the only class that hits P&L. */
-export type LedgerClass = "equity" | "asset" | "expense"
+/**
+ * equity  = owner money, never profit.
+ * asset   = cash became a thing you own.
+ * expense = money gone — reduces profit.
+ * income  = money earned outside of a sale — increases profit.
+ */
+export type LedgerClass = "equity" | "asset" | "expense" | "income"
 
 export type CategoryMeta = {
   label: string
@@ -116,6 +126,14 @@ export const CATEGORY_META: Record<LedgerCategory, CategoryMeta> = {
       "ONLY for cash you refunded outside Medusa. A return recorded in Medusa has already been " +
       "netted out of revenue and cash — journaling it here as well subtracts it twice.",
   },
+  other_income: {
+    label: "Other income",
+    klass: "income",
+    direction: "in",
+    help:
+      "Money in that isn't a sale and isn't partner capital: a courier compensating you for a " +
+      "parcel they destroyed, scrap sales, a supplier credit. Real income — it lifts profit.",
+  },
 }
 
 export const EQUITY_CATEGORIES = LEDGER_CATEGORIES.filter(
@@ -129,6 +147,11 @@ export const ASSET_CATEGORIES = LEDGER_CATEGORIES.filter(
 /** The only categories that reduce net profit. */
 export const PNL_EXPENSE_CATEGORIES = LEDGER_CATEGORIES.filter(
   (c) => CATEGORY_META[c].klass === "expense"
+)
+
+/** The only categories that increase net profit without being a sale. */
+export const PNL_INCOME_CATEGORIES = LEDGER_CATEGORIES.filter(
+  (c) => CATEGORY_META[c].klass === "income"
 )
 
 /** Categories that require a partner to be named. */
@@ -163,6 +186,9 @@ export const LEDGER_SOURCE_TYPES = [
   // A restock: cash paired with a real stock increase. Protected from casual deletion so
   // the cash and the stock can't drift apart.
   "restock",
+  // The courier fee for one order, mirrored from Order Processing. Keyed to the order, so
+  // correcting the fee updates its row instead of adding a second one.
+  "order",
 ] as const
 export type LedgerSourceType = (typeof LEDGER_SOURCE_TYPES)[number]
 

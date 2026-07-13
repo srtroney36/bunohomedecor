@@ -1,23 +1,18 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
-import { pnlExpenses } from "../../../lib/accounting/ledger-math"
-import { computeSalesMetrics, monthStart } from "../../../lib/insights/sales-metrics"
+import { pnlExpenses, pnlIncome } from "../../../lib/accounting/ledger-math"
+import { monthStart } from "../../../lib/insights/sales-metrics"
+import { computeOrderEconomics } from "../../../lib/orders/order-economics"
 import { ACCOUNTING_MODULE } from "../../../modules/accounting"
-import { PNL_EXPENSE_CATEGORIES } from "../../../modules/accounting/categories"
 
 /**
  * GET /admin/sales-insights?from=ISO&to=ISO
  *
- * Gross profit (revenue − COGS) comes from Medusa's own orders — that math now lives in
- * lib/insights/sales-metrics.ts so the Accounting dashboard computes it from the same
- * implementation instead of a second copy that drifts.
+ * The real economics, built from the per-order P&L rather than a pile of aggregates — because
+ * "we made 40% margin" means nothing if every parcel loses money on delivery.
  *
- * The operating expenses that turn gross profit into NET profit come from the accounting
- * ledger, because Medusa has no idea what you spent on ads or what the courier charged you.
- *
- * Only the four P&L categories are subtracted. Restocks and fixed assets are cash-out but
- * NOT expenses — that money became goods and equipment you still own, and it reaches the
- * P&L later as COGS. Subtracting them here would report a loss every time you restocked.
+ * The courier fee now lives on the order, so DELIVERY MARGIN (what the customer paid to receive
+ * it, minus what carrying it actually cost) is finally a number you can see.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
   const now = new Date()
@@ -25,50 +20,92 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const to = req.query.to ? new Date(String(req.query.to)) : new Date(now)
   to.setHours(23, 59, 59, 999)
 
-  const base = await computeSalesMetrics(req.scope, { from, to })
+  const orders = await computeOrderEconomics(req.scope, { from, to })
 
+  const sum = (f: (o: (typeof orders)[number]) => number) => orders.reduce((s, o) => s + f(o), 0)
+
+  const product_revenue = sum((o) => o.product_revenue)
+  const delivery_charged = sum((o) => o.delivery_charged)
+  const cogs = sum((o) => o.cogs)
+  const packaging = sum((o) => o.packaging)
+  const courier_cost = sum((o) => o.courier_cost)
+  const write_off = sum((o) => o.write_off)
+
+  const gross_profit = product_revenue - cogs
+  const delivery_margin = delivery_charged - courier_cost
+
+  // Expenses the ledger owns and no order knows about: ads, rent, salaries.
   const acct: any = req.scope.resolve(ACCOUNTING_MODULE)
   const rows = await acct.listLedgerEntries(
-    {
-      category: PNL_EXPENSE_CATEGORIES,
-      entry_date: { $gte: from, $lte: to },
-    },
+    { entry_date: { $gte: from, $lte: to } },
     { take: 100000 }
   )
   const exp = pnlExpenses(rows)
+  const other_income = pnlIncome(rows)
 
-  // Packaging consumed by orders in the range is a real cost, derived from orders (not the
-  // ledger), so it is added on top of the ledger expenses.
-  const packagingUsed = base.metrics.packaging_used
-  // Inventory written off in the range (shrinkage/damage), net of `found` stock — a non-cash
-  // cost from the FIFO replay, added alongside packaging.
-  const inventoryAdjustments = base.metrics.inventory_writeoff - base.metrics.inventory_found
-  const operatingExpenses = exp.total + packagingUsed + inventoryAdjustments
-  const netProfit = base.metrics.gross_profit - operatingExpenses
+  /**
+   * Courier fees are now booked per order, so they're already in `courier_cost`. Subtracting the
+   * ledger's courier_fee total again would charge for every parcel twice.
+   */
+  const overhead = exp.total - exp.courier_fee
+
+  const net_profit =
+    gross_profit + delivery_margin + other_income - packaging - write_off - overhead
+
+  const countBy = <K extends string>(f: (o: (typeof orders)[number]) => K) => {
+    const m: Record<string, number> = {}
+    for (const o of orders) m[f(o)] = (m[f(o)] ?? 0) + 1
+    return m
+  }
 
   res.json({
     range: { from: from.toISOString(), to: to.toISOString() },
-    currency_code: base.currency_code,
-    counted_orders: base.counted_orders,
-    total_orders_in_range: base.total_orders_in_range,
-    variants_missing_cost: base.variants_missing_cost,
-    metrics: {
-      ...base.metrics,
+    currency_code: orders[0]?.currency_code ?? "bdt",
+    order_count: orders.length,
 
-      // Operating expenses: from the accounting ledger, plus packaging drawn from the pool.
-      marketing_spend: exp.marketing,
-      courier_cost: exp.courier_fee,
-      other_expenses: exp.other_expense,
-      refunds: exp.refund,
-      packaging_used: packagingUsed,
-      inventory_adjustments: inventoryAdjustments,
-      operating_expenses: operatingExpenses,
-
-      net_profit: netProfit,
-      net_margin_pct:
-        base.metrics.product_revenue > 0
-          ? (netProfit / base.metrics.product_revenue) * 100
-          : 0,
+    revenue: {
+      product: product_revenue,
+      delivery_charged,
+      total: product_revenue + delivery_charged,
     },
+
+    costs: {
+      cogs,
+      packaging,
+      courier: courier_cost,
+      write_off,
+      overhead,
+      marketing: exp.marketing,
+      other_expense: exp.other_expense,
+      refunds: exp.refund,
+    },
+
+    profit: {
+      gross_profit,
+      /** What delivery made or lost. Negative means you are paying to ship. */
+      delivery_margin,
+      other_income,
+      net_profit,
+      net_margin_pct: product_revenue > 0 ? (net_profit / product_revenue) * 100 : 0,
+    },
+
+    cash: {
+      captured: sum((o) => o.captured),
+      refunded: sum((o) => o.refunded),
+      /** COD still sitting with the courier or the customer. */
+      outstanding: sum((o) => o.outstanding),
+    },
+
+    breakdown: {
+      by_status: countBy((o) => o.order_status),
+      by_payment: countBy((o) => o.payment_status),
+      by_issue: countBy((o) => o.issue_status),
+    },
+
+    /** The parcels that lost money — the whole point of a per-order P&L. */
+    loss_making: orders
+      .filter((o) => o.net_profit < 0)
+      .sort((a, b) => a.net_profit - b.net_profit)
+      .slice(0, 10),
   })
 }

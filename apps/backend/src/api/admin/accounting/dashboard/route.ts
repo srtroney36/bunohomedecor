@@ -1,6 +1,6 @@
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 
-import { pnlExpenses, summariseLedger } from "../../../../lib/accounting/ledger-math"
+import { pnlExpenses, pnlIncome, summariseLedger } from "../../../../lib/accounting/ledger-math"
 import { computeInventoryAtCost } from "../../../../lib/insights/inventory-value"
 import {
   allTimeRange,
@@ -96,7 +96,9 @@ export async function GET(
     periodSales.metrics.inventory_writeoff - periodSales.metrics.inventory_found
   const gross = periodSales.metrics.gross_profit
   const operating_expenses = periodExpenses.total + packaging_used_period + inventory_adjustments
-  const net_profit = gross - operating_expenses
+  // Money in that isn't a sale — courier compensation for a destroyed parcel, scrap. Real income.
+  const other_income = pnlIncome(periodRows)
+  const net_profit = gross + other_income - operating_expenses
 
   res.json({
     currency_code: lifetimeSales.currency_code ?? "bdt",
@@ -158,6 +160,7 @@ export async function GET(
       refund: periodExpenses.refund,
       packaging_used: packaging_used_period,
       inventory_adjustments,
+      other_income,
       operating_expenses,
       net_profit,
       net_margin_pct:

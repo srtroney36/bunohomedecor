@@ -88,6 +88,9 @@ module.exports = defineConfig({
     {
       resolve: "./src/modules/accounting",
     },
+    {
+      resolve: "./src/modules/orderProcessing",
+    },
     ...(hasS3
       ? [
           {

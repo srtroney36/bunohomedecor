@@ -32,6 +32,7 @@ import HomepagePage from "../homepage/page"
 import ProductCardsPage from "../product-cards/page"
 import { PaymentsSection } from "./sections/payments-section"
 import { CouriersSection } from "./sections/couriers-section"
+import { CourierRatesSection } from "./sections/courier-rates-section"
 import { TrackingSection } from "./sections/tracking-section"
 import { AuthSection } from "./sections/auth-section"
 import { NotificationsSection } from "./sections/notifications-section"
@@ -165,6 +166,14 @@ function IntegrationSettings() {
 
       <CategorySection title="Couriers" description="Steadfast, RedX, Pathao" icon={TruckFast}>
         <CouriersSection />
+      </CategorySection>
+
+      <CategorySection
+        title="Courier Rates"
+        description="What each zone costs you — makes delivery margin visible"
+        icon={TruckFast}
+      >
+        <CourierRatesSection />
       </CategorySection>
 
       <CategorySection title="Tracking & Analytics" description="Meta Pixel, GA4, Conversions API" icon={ChartBar}>

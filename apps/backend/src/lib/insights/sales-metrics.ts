@@ -84,25 +84,53 @@ export async function computeSalesMetrics(
     allCosts.map((c: any) => [c.variant_id, Number(c.packaging_cost) || 0])
   )
 
-  // Pull orders placed in the range
-  const orders: any[] = []
-  let offset = 0
-  for (;;) {
-    const { data } = await query.graph({
-      entity: "order",
-      fields: [
-        "id", "status", "fulfillment_status", "payment_status", "currency_code",
-        "total", "item_total", "shipping_total", "created_at",
-        "items.id", "items.quantity", "items.variant_id", "items.unit_price",
-        "returns.id", "returns.items.item_id", "returns.items.quantity",
-      ],
-      filters: { created_at: { $gte: from, $lte: to } },
-      pagination: { skip: offset, take: 200 },
-    })
-    orders.push(...data)
-    if (data.length < 200) break
-    offset += data.length
+  /**
+   * Orders in the range — fetched as TWO queries, deliberately.
+   *
+   * Asking query.graph for an order's TOTALS and its ITEMS in the same call silently corrupts
+   * the totals: `item_total` comes back as 0 and `total` collapses to just the shipping. Not an
+   * error — a wrong number, which is how this store came to report zero product revenue.
+   *
+   * So: totals on their own, items on their own, joined by id. Never merge these two field sets.
+   */
+  const filters = { created_at: { $gte: from, $lte: to } }
+  const PAGE = 200
+
+  const paged = async (fields: string[]): Promise<any[]> => {
+    const out: any[] = []
+    let offset = 0
+    for (;;) {
+      const { data } = await query.graph({
+        entity: "order",
+        fields,
+        filters,
+        pagination: { skip: offset, take: PAGE },
+      })
+      out.push(...data)
+      if (data.length < PAGE) break
+      offset += data.length
+    }
+    return out
   }
+
+  const [totalsRows, itemRows] = await Promise.all([
+    paged([
+      "id", "status", "fulfillment_status", "payment_status", "currency_code", "created_at",
+      "total", "item_total", "shipping_total",
+    ]),
+    paged([
+      "id",
+      "items.id", "items.quantity", "items.variant_id", "items.unit_price",
+      "returns.id", "returns.items.item_id", "returns.items.quantity",
+    ]),
+  ])
+
+  const itemsById = new Map<string, any>(itemRows.map((r: any) => [r.id, r]))
+  const orders: any[] = totalsRows.map((t: any) => ({
+    ...t,
+    items: itemsById.get(t.id)?.items ?? [],
+    returns: itemsById.get(t.id)?.returns ?? [],
+  }))
 
   const counted = orders.filter(
     (o) => o.status !== "canceled" && !EXCLUDED_FULFILLMENT.has(o.fulfillment_status)

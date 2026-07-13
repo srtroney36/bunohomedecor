@@ -78,6 +78,16 @@ export function summariseLedger(rows: LedgerRow[]): LedgerSummary {
   }
 }
 
+/** Money in that isn't a sale (courier compensation, scrap). Lifts net profit. */
+export function pnlIncome(rows: LedgerRow[]): number {
+  let total = 0
+  for (const r of rows) {
+    if (CATEGORY_META[r.category]?.klass !== "income") continue
+    total += num(r.amount)
+  }
+  return total
+}
+
 export type PnlExpenses = Record<(typeof PNL_EXPENSE_CATEGORIES)[number], number> & {
   total: number
 }

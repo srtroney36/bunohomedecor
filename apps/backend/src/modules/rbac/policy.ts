@@ -35,6 +35,8 @@ const SEGMENT_ALIASES: Record<string, string> = {
   // Orders & fulfillment
   orders: "orders",
   "quick-orders": "orders",
+  // The order-processing pipeline is order work: same grant.
+  "order-processing": "orders",
   payments: "orders",
   "payment-collections": "orders",
   "draft-orders": "draft_orders",

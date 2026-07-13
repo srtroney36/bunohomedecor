@@ -1,65 +1,47 @@
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { CurrencyDollar } from "@medusajs/icons"
-import { Badge, Button, Container, Heading, Text, toast } from "@medusajs/ui"
-import { useCallback, useEffect, useState } from "react"
+import { Badge, Button, Container, Heading, Table, Text } from "@medusajs/ui"
+import { useQuery } from "@tanstack/react-query"
+import { useState } from "react"
 
-async function adminFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const token =
-    localStorage.getItem("_medusa_auth_token") ||
-    localStorage.getItem("medusa_auth_token") ||
-    ""
-  const res = await fetch(`/admin${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-  })
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-  return res.json() as Promise<T>
-}
+import { money } from "../../lib/kpi"
+import { rbacFetch } from "../../lib/permissions"
+import {
+  ISSUE_STATUS_META,
+  ORDER_STATUS_META,
+  type IssueStatusKey,
+  type OrderRow,
+  type OrderStatusKey,
+} from "../../lib/order-processing-api"
 
 type Insights = {
-  currency_code: string | null
-  counted_orders: number
-  total_orders_in_range: number
-  variants_missing_cost: number
-  metrics: {
-    total_revenue: number
-    product_revenue: number
+  currency_code: string
+  order_count: number
+  revenue: { product: number; delivery_charged: number; total: number }
+  costs: {
     cogs: number
-    gross_profit: number
-    margin_pct: number
-    shipping_collected: number
-    cod_paid: number
-    cod_pending: number
-    avg_order_value: number
-    returned_orders: number
-    returned_value: number
-    // Operating expenses from the accounting ledger, and the net profit they produce.
-    marketing_spend: number
-    courier_cost: number
-    other_expenses: number
+    packaging: number
+    courier: number
+    write_off: number
+    overhead: number
+    marketing: number
+    other_expense: number
     refunds: number
-    packaging_used: number
-    operating_expenses: number
+  }
+  profit: {
+    gross_profit: number
+    delivery_margin: number
+    other_income: number
     net_profit: number
     net_margin_pct: number
   }
-}
-
-function money(n: number, cur: string | null): string {
-  const c = (cur || "BDT").toUpperCase()
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: c,
-      maximumFractionDigits: 0,
-    }).format(n || 0)
-  } catch {
-    return `${Math.round(n || 0).toLocaleString()} ${c}`
+  cash: { captured: number; refunded: number; outstanding: number }
+  breakdown: {
+    by_status: Record<string, number>
+    by_payment: Record<string, number>
+    by_issue: Record<string, number>
   }
+  loss_making: OrderRow[]
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
@@ -67,16 +49,16 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 function presetRange(key: string): [string, string] {
   const now = new Date()
   const today = iso(now)
-  if (key === "this_month") return [iso(new Date(now.getFullYear(), now.getMonth(), 1)), today]
   if (key === "last_month") {
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const end = new Date(now.getFullYear(), now.getMonth(), 0)
-    return [iso(start), iso(end)]
+    return [
+      iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      iso(new Date(now.getFullYear(), now.getMonth(), 0)),
+    ]
   }
   if (key === "last_30") {
-    const start = new Date(now)
-    start.setDate(start.getDate() - 29)
-    return [iso(start), today]
+    const s = new Date(now)
+    s.setDate(s.getDate() - 29)
+    return [iso(s), today]
   }
   if (key === "this_year") return [iso(new Date(now.getFullYear(), 0, 1)), today]
   return [iso(new Date(now.getFullYear(), now.getMonth(), 1)), today]
@@ -87,20 +69,28 @@ function Kpi({
   value,
   hint,
   accent,
+  emphasis,
 }: {
   label: string
   value: string
   hint?: string
-  accent?: "green" | "red" | "base"
+  accent?: "green" | "red" | "orange" | "base"
+  emphasis?: boolean
 }) {
   const color =
     accent === "green"
       ? "text-ui-tag-green-text"
       : accent === "red"
-      ? "text-ui-tag-red-text"
-      : "text-ui-fg-base"
+        ? "text-ui-tag-red-text"
+        : accent === "orange"
+          ? "text-ui-tag-orange-text"
+          : "text-ui-fg-base"
   return (
-    <div className="flex flex-col gap-y-1 rounded-lg border border-ui-border-base p-4">
+    <div
+      className={`flex flex-col gap-y-1 rounded-lg border p-4 ${
+        emphasis ? "border-ui-border-strong bg-ui-bg-subtle" : "border-ui-border-base"
+      }`}
+    >
       <Text size="xsmall" className="text-ui-fg-muted">
         {label}
       </Text>
@@ -116,152 +106,170 @@ function Kpi({
 
 const SalesInsightsPage = () => {
   const [[from, to], setRange] = useState<[string, string]>(() => presetRange("this_month"))
-  const [data, setData] = useState<Insights | null>(null)
-  const [loading, setLoading] = useState(true)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      setData(
-        await adminFetch<Insights>(`/sales-insights?from=${from}&to=${to}`)
-      )
-    } catch {
-      toast.error("Failed to load sales insights")
-    } finally {
-      setLoading(false)
-    }
-  }, [from, to])
+  const { data, isLoading } = useQuery({
+    queryKey: ["sales-insights", from, to],
+    queryFn: () => rbacFetch<Insights>(`/sales-insights?from=${from}&to=${to}`),
+  })
 
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const m = data?.metrics
-  const cur = data?.currency_code ?? null
-
-  const presets: { key: string; label: string }[] = [
-    { key: "this_month", label: "This month" },
-    { key: "last_month", label: "Last month" },
-    { key: "last_30", label: "Last 30 days" },
-    { key: "this_year", label: "This year" },
-  ]
+  const cur = data?.currency_code ?? "bdt"
 
   return (
     <div className="flex flex-col gap-y-4 p-4">
-      <Container className="px-6 py-6 flex flex-col gap-y-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <Heading level="h1">Sales Insights</Heading>
-            <Text size="small" className="text-ui-fg-subtle mt-1">
-              Profit/loss, COD, and delivery — over <b>fulfilled</b> orders. Returned orders are
-              netted out (their items go back to stock), and shown under <b>Returns</b>.
-            </Text>
-          </div>
+      <Container className="flex flex-col gap-y-5 px-6 py-6">
+        <div>
+          <Heading level="h1">Sales Insights</Heading>
+          <Text size="small" className="text-ui-fg-subtle mt-1">
+            Built from each order's real P&amp;L — what the goods cost (FIFO), what the box cost,
+            and what the courier charged. A busy store can still lose money on every parcel; this
+            is where you'd see it.
+          </Text>
         </div>
 
-        {/* Date range */}
-        <div className="flex items-end gap-3 flex-wrap">
-          <div className="flex flex-wrap gap-1.5">
-            {presets.map((p) => (
-              <Button
-                key={p.key}
-                size="small"
-                variant="secondary"
-                onClick={() => setRange(presetRange(p.key))}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="flex flex-col gap-y-1">
-              <Text size="xsmall" className="text-ui-fg-muted">From</Text>
-              <input
-                type="date"
-                value={from}
-                onChange={(e) => setRange([e.target.value, to])}
-                className="h-8 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
-              />
-            </div>
-            <div className="flex flex-col gap-y-1">
-              <Text size="xsmall" className="text-ui-fg-muted">To</Text>
-              <input
-                type="date"
-                value={to}
-                onChange={(e) => setRange([from, e.target.value])}
-                className="h-8 rounded-md border border-ui-border-base bg-ui-bg-field px-2 text-sm"
-              />
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { k: "this_month", l: "This month" },
+            { k: "last_month", l: "Last month" },
+            { k: "last_30", l: "Last 30 days" },
+            { k: "this_year", l: "This year" },
+          ].map((p) => (
+            <Button key={p.k} size="small" variant="secondary" onClick={() => setRange(presetRange(p.k))}>
+              {p.l}
+            </Button>
+          ))}
         </div>
 
-        {loading || !m ? (
+        {isLoading || !data ? (
           <Text size="small" className="text-ui-fg-muted">
             Loading…
           </Text>
         ) : (
           <>
-            {data!.variants_missing_cost > 0 && (
-              <Badge size="small" color="orange">
-                {data!.variants_missing_cost} sold variant(s) have no cost price set — profit is
-                understated. Set costs on their product pages.
-              </Badge>
-            )}
-
-            {/* Profit headline */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Headline */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <Kpi label="Product revenue" value={money(data.revenue.product, cur)} hint={`${data.order_count} orders`} />
               <Kpi
                 label="Gross profit"
-                value={money(m.gross_profit, cur)}
-                hint={`${m.margin_pct.toFixed(1)}% margin — revenue less COGS`}
-                accent={m.gross_profit >= 0 ? "green" : "red"}
+                value={money(data.profit.gross_profit, cur)}
+                hint="revenue − cost of goods"
+                accent={data.profit.gross_profit >= 0 ? "green" : "red"}
+              />
+              <Kpi
+                label="Delivery margin"
+                value={money(data.profit.delivery_margin, cur)}
+                hint="charged − courier cost"
+                accent={data.profit.delivery_margin >= 0 ? "green" : "red"}
               />
               <Kpi
                 label="Net profit"
-                value={money(m.net_profit, cur)}
-                hint={`${m.net_margin_pct.toFixed(1)}% — after marketing & expenses`}
-                accent={m.net_profit >= 0 ? "green" : "red"}
+                value={money(data.profit.net_profit, cur)}
+                hint={`${data.profit.net_margin_pct.toFixed(1)}% margin`}
+                accent={data.profit.net_profit >= 0 ? "green" : "red"}
+                emphasis
+              />
+            </div>
+
+            {/* Where the money goes */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <Kpi label="Cost of goods" value={money(data.costs.cogs, cur)} accent="red" />
+              <Kpi label="Packaging" value={money(data.costs.packaging, cur)} accent="red" />
+              <Kpi label="Courier" value={money(data.costs.courier, cur)} accent="red" />
+              <Kpi
+                label="Damaged / written off"
+                value={money(data.costs.write_off, cur)}
+                accent={data.costs.write_off > 0 ? "red" : "base"}
               />
               <Kpi
-                label="Operating expenses"
-                value={money(m.operating_expenses, cur)}
-                hint="from the Cash Book, this period"
+                label="Overheads"
+                value={money(data.costs.overhead, cur)}
+                hint="ads, rent, other"
                 accent="red"
               />
             </div>
 
-            {/* Revenue / cost / expense breakdown */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Kpi label="Product revenue" value={money(m.product_revenue, cur)} hint="items only (excl. shipping)" />
-              <Kpi label="Cost of goods (COGS)" value={money(m.cogs, cur)} />
-              <Kpi label="Marketing / ads" value={money(m.marketing_spend, cur)} accent="red" />
+            {/* Cash */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Kpi label="Cash collected" value={money(data.cash.captured, cur)} accent="green" />
               <Kpi
-                label="Packaging + courier + other"
-                value={money(m.packaging_used + m.courier_cost + m.other_expenses + m.refunds, cur)}
-                hint="packaging used, courier, refunds, other"
-                accent="red"
+                label="COD outstanding"
+                value={money(data.cash.outstanding, cur)}
+                hint="with the courier / customer"
+                accent={data.cash.outstanding > 0 ? "orange" : "base"}
+              />
+              <Kpi label="Refunded" value={money(data.cash.refunded, cur)} accent="red" />
+              <Kpi
+                label="Other income"
+                value={money(data.profit.other_income, cur)}
+                hint="courier compensation, scrap"
+                accent="green"
               />
             </div>
 
-            {/* COD + delivery */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Kpi label="COD collected (paid)" value={money(m.cod_paid, cur)} hint="payment captured" accent="green" />
-              <Kpi label="COD pending" value={money(m.cod_pending, cur)} hint="delivered/awaiting, not captured" accent="red" />
-              <Kpi label="Delivery collected" value={money(m.shipping_collected, cur)} />
-              <Kpi label="Total revenue" value={money(m.total_revenue, cur)} hint="incl. shipping, net of returns" />
+            {/* Issues */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Text size="small" weight="plus" className="text-ui-fg-subtle">
+                Issues:
+              </Text>
+              {Object.entries(data.breakdown.by_issue)
+                .filter(([k, n]) => k !== "none" && n > 0)
+                .map(([k, n]) => (
+                  <Badge key={k} size="2xsmall" color={ISSUE_STATUS_META[k as IssueStatusKey]?.color ?? "grey"}>
+                    {ISSUE_STATUS_META[k as IssueStatusKey]?.label ?? k}: {n}
+                  </Badge>
+                ))}
+              {Object.entries(data.breakdown.by_issue).every(([k, n]) => k === "none" || n === 0) && (
+                <Text size="small" className="text-ui-fg-muted">
+                  none
+                </Text>
+              )}
             </div>
 
-            {/* Orders + returns */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <Kpi label="Fulfilled orders" value={String(data!.counted_orders)} hint={`${data!.total_orders_in_range} placed in range`} />
-              <Kpi label="Avg order value" value={money(m.avg_order_value, cur)} />
-              <Kpi
-                label="Returns"
-                value={String(m.returned_orders)}
-                hint={`${money(m.returned_value, cur)} netted out`}
-                accent={m.returned_orders > 0 ? "red" : "base"}
-              />
-            </div>
+            {/* The parcels that lost money — the whole point */}
+            {data.loss_making.length > 0 && (
+              <div className="flex flex-col gap-y-2">
+                <Text size="small" weight="plus" className="text-ui-tag-red-text">
+                  Orders that lost money
+                </Text>
+                <div className="overflow-x-auto rounded-lg border border-ui-border-error">
+                  <Table>
+                    <Table.Header>
+                      <Table.Row>
+                        <Table.HeaderCell>Order</Table.HeaderCell>
+                        <Table.HeaderCell>Status</Table.HeaderCell>
+                        <Table.HeaderCell className="text-right">Revenue</Table.HeaderCell>
+                        <Table.HeaderCell className="text-right">Goods</Table.HeaderCell>
+                        <Table.HeaderCell className="text-right">Courier</Table.HeaderCell>
+                        <Table.HeaderCell className="text-right">Lost</Table.HeaderCell>
+                      </Table.Row>
+                    </Table.Header>
+                    <Table.Body>
+                      {data.loss_making.map((o) => (
+                        <Table.Row
+                          key={o.order_id}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            window.location.href = `/app/orders/${o.order_id}`
+                          }}
+                        >
+                          <Table.Cell className="font-medium">#{o.display_id}</Table.Cell>
+                          <Table.Cell>
+                            <Badge size="2xsmall" color={ORDER_STATUS_META[o.order_status as OrderStatusKey]?.color ?? "grey"}>
+                              {ORDER_STATUS_META[o.order_status as OrderStatusKey]?.label ?? o.order_status}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell className="text-right">{money(o.product_revenue, cur)}</Table.Cell>
+                          <Table.Cell className="text-right">{money(o.cogs, cur)}</Table.Cell>
+                          <Table.Cell className="text-right">{money(o.courier_cost, cur)}</Table.Cell>
+                          <Table.Cell className="text-right font-medium text-ui-tag-red-text">
+                            {money(o.net_profit, cur)}
+                          </Table.Cell>
+                        </Table.Row>
+                      ))}
+                    </Table.Body>
+                  </Table>
+                </div>
+              </div>
+            )}
           </>
         )}
       </Container>

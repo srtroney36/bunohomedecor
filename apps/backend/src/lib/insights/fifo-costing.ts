@@ -70,6 +70,8 @@ export type FifoCosting = {
    * so their margin reads high until the rest ships. Surfaced, never silent.
    */
   partially_fulfilled_orders: number
+  /** FIFO cost attributed to each order id — the basis of the per-order P&L. */
+  cogs_by_ref: Map<string, number>
 }
 
 /** Inputs to the pure replay. */
@@ -96,10 +98,22 @@ export type FifoConsumption = {
   report_date?: Date | string
   qty: number | string
   kind: "sale" | "shrink"
+  /**
+   * What consumed these units — the order id, for a sale. Lets the replay attribute the exact
+   * FIFO cost back to the order that drew it, which is what makes a per-order P&L possible
+   * (you cannot know if an order made money without knowing what ITS goods cost).
+   */
+  ref?: string
 }
 
+/**
+ * Always coerce through Number(). Medusa hands back BigNumber OBJECTS for money/quantity
+ * fields, and Postgres `numeric` arrives as a string. A bare `v as number` cast leaves a
+ * BigNumber object intact, `Number.isFinite()` then rejects it, and the value silently becomes
+ * zero — a wrong number, not an error. Number(v) calls valueOf and gets the truth.
+ */
 const num = (v: unknown): number => {
-  const n = typeof v === "string" ? Number(v) : (v as number)
+  const n = Number(v)
   return Number.isFinite(n) ? n : 0
 }
 
@@ -110,7 +124,14 @@ const inRange = (t: number, r?: CostingRange): boolean =>
 // on the same instant (stock received today is available to sell today).
 type Ev =
   | { t: number; seq: 0; kind: "receipt"; state: BatchState }
-  | { t: number; seq: 1; kind: "sale" | "shrink"; qty: number; dateInRange: boolean }
+  | {
+      t: number
+      seq: 1
+      kind: "sale" | "shrink"
+      qty: number
+      dateInRange: boolean
+      ref?: string
+    }
 
 /**
  * Pure FIFO replay. Given the cost layers and every consumption (sales + write-offs), returns
@@ -163,6 +184,7 @@ export function replayFifo(
       kind: c.kind,
       qty: num(c.qty),
       dateInRange: inRange(reportT, range),
+      ref: c.ref,
     })
   }
 
@@ -170,6 +192,8 @@ export function replayFifo(
   let shrinkageValueInRange = 0
   let uncostedUnits = 0
   const uncostedVariants = new Set<string>()
+  // Cost attributed back to whatever consumed it (an order), for the per-order P&L.
+  const cogsByRef = new Map<string, number>()
 
   for (const [variantId, events] of byVariant) {
     events.sort((a, b) => a.t - b.t || a.seq - b.seq)
@@ -199,6 +223,9 @@ export function replayFifo(
         const value = take * layer.landed_unit_cost
         if (ev.kind === "sale") {
           if (ev.dateInRange) cogsInRange += value
+          // Always attribute, regardless of the reporting window — an order's own P&L is about
+          // that order, not about which month you happen to be looking at.
+          if (ev.ref) cogsByRef.set(ev.ref, (cogsByRef.get(ev.ref) ?? 0) + value)
         } else if (ev.dateInRange) {
           shrinkageValueInRange += value
         }
@@ -234,6 +261,7 @@ export function replayFifo(
     variants_uncosted: uncostedVariants.size,
     // Set by computeFifoCosting, which is the only caller that sees orders.
     partially_fulfilled_orders: 0,
+    cogs_by_ref: cogsByRef,
   }
 }
 
@@ -325,6 +353,7 @@ export async function computeFifoCosting(
           report_date: o.created_at, // period: matches where the revenue is booked
           qty: consumed,
           kind: "sale",
+          ref: o.id, // attribute the cost back to this order
         })
       }
 
