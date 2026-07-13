@@ -195,6 +195,9 @@ const QuickOrderPage = () => {
   const grandTotal = itemsTotal + (Number(delivery) || 0)
   const advanceNum = Number(advance) || 0
   const dueAtDelivery = Math.max(0, grandTotal - advanceNum)
+  // Pre/custom profit preview: selling price + delivery − production cost. Courier cost isn't
+  // known until the order ships, so it's excluded here and settled on the order later.
+  const estProfit = itemsTotal + (Number(delivery) || 0) - (Number(production) || 0)
 
   const fmt = (n: number) => `${(n || 0).toLocaleString()} ${currency.toUpperCase()}`
 
@@ -380,6 +383,14 @@ const QuickOrderPage = () => {
             </Text>
           ) : (
             <div className="flex flex-col gap-y-2">
+              {/* Column labels — so it's clear which number is the selling price */}
+              <div className="flex items-center gap-2 text-ui-fg-muted">
+                <Text size="xsmall" className="flex-1">Item</Text>
+                <Text size="xsmall" className="w-16 text-center">Qty</Text>
+                <Text size="xsmall" className="w-28 text-center">Selling price</Text>
+                <Text size="xsmall" className="w-24 text-right">Line total</Text>
+                <span className="w-4" />
+              </div>
               {lines.map((l) => (
                 <div key={l.key} className="flex items-center gap-2">
                   {isCustom ? (
@@ -426,6 +437,10 @@ const QuickOrderPage = () => {
           </Field>
           <Field label={`Delivery charged (${currency.toUpperCase()})`}>
             <Input type="number" min={0} value={delivery} onChange={(e) => setDelivery(e.target.value)} />
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Shipment charge billed to the customer — revenue. What the courier costs you is set
+              on the order later.
+            </Text>
           </Field>
           <Field label="Note (optional)">
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Internal note" />
@@ -449,6 +464,24 @@ const QuickOrderPage = () => {
             </Field>
           )}
         </div>
+
+        {/* Profit preview — shows exactly how the order's profit is worked out */}
+        {isProduction && (itemsTotal > 0 || Number(production) > 0) && (
+          <div className="flex flex-col gap-y-1 rounded-lg bg-ui-bg-subtle p-3">
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Selling price {fmt(itemsTotal)} + delivery {fmt(Number(delivery) || 0)} − production{" "}
+              {fmt(Number(production) || 0)} = estimated profit
+              <span className="text-ui-fg-muted"> (before courier cost)</span>
+            </Text>
+            <Text
+              size="small"
+              weight="plus"
+              className={estProfit >= 0 ? "text-ui-tag-green-text" : "text-ui-tag-red-text"}
+            >
+              Est. profit {fmt(estProfit)}
+            </Text>
+          </div>
+        )}
 
         {/* Total + submit */}
         <div className="flex items-center justify-between border-t border-ui-border-base pt-4">
