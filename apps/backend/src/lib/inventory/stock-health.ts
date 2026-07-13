@@ -185,8 +185,29 @@ export async function inspectStockHealth(container: MedusaContainer): Promise<St
     })
   }
 
-  /* 5) Units sold with no cost layer → COGS and inventory value understated. */
   const fifo = await computeFifoCosting(container)
+
+  /**
+   * 5) Sold with stock tracking OFF. Not drift — there's no shelf to disagree with. But those
+   *    sales carry no cost of goods, so profit reads high. Reported separately and honestly,
+   *    because folding it into the "uncosted" alarm would create a warning that can never be
+   *    cleared, and those get ignored.
+   */
+  if (fifo.untracked_units > 0) {
+    issues.push({
+      code: "uncosted_stock",
+      message:
+        `${fifo.untracked_variants} variant(s) sold with "Manage inventory" turned off ` +
+        `(${fifo.untracked_units} unit(s)). Their stock isn't tracked, so no cost of goods is ` +
+        `counted for them — profit on those sales reads higher than it really is.`,
+      fix_where:
+        "If they're physical products, turn on Manage inventory on the variant and restock them. " +
+        "If they're made-to-order or a service, this is expected.",
+      blocking: false,
+    })
+  }
+
+  /* 6) Units sold with no cost layer → COGS and inventory value understated. */
   if (fifo.uncosted_units > 0) {
     issues.push({
       code: "uncosted_stock",

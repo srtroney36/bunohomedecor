@@ -72,6 +72,12 @@ export type FifoCosting = {
   partially_fulfilled_orders: number
   /** FIFO cost attributed to each order id — the basis of the per-order P&L. */
   cogs_by_ref: Map<string, number>
+  /**
+   * Sold with "Manage inventory" OFF — no shelf, no batches, so no cost basis. This is NOT drift
+   * and must never be reported as such; it just means those sales carry no cost of goods.
+   */
+  untracked_units: number
+  untracked_variants: number
 }
 
 /** Inputs to the pure replay. */
@@ -262,6 +268,9 @@ export function replayFifo(
     // Set by computeFifoCosting, which is the only caller that sees orders.
     partially_fulfilled_orders: 0,
     cogs_by_ref: cogsByRef,
+    // Both set by computeFifoCosting — the pure replay never sees a variant's settings.
+    untracked_units: 0,
+    untracked_variants: 0,
   }
 }
 
@@ -307,13 +316,34 @@ export async function computeFifoCosting(
    */
   const { data: variantRows } = await query.graph({
     entity: "product_variant",
-    fields: ["id", "inventory_items.required_quantity"],
+    fields: [
+      "id",
+      "manage_inventory",
+      "inventory_items.inventory_item_id",
+      "inventory_items.required_quantity",
+    ],
   })
+
   const requiredPerVariant = new Map<string, number>()
+  /**
+   * Variants whose stock we actually track.
+   *
+   * A variant with "Manage inventory" off (made-to-order, a service, a digital item) has NO
+   * shelf and NO cost batches — nothing to draw down. If we consumed for it anyway, it would
+   * report "sold with no cost batch" forever and the warning could never clear. A warning that
+   * can never be cleared is a warning people learn to ignore, which is worse than no warning.
+   *
+   * So we skip them here, and report them honestly and separately as "no cost basis".
+   */
+  const tracked = new Set<string>()
+
   for (const v of (variantRows ?? []) as any[]) {
-    const req = num(v.inventory_items?.[0]?.required_quantity)
+    const link = v.inventory_items?.[0]
+    const req = num(link?.required_quantity)
     requiredPerVariant.set(v.id, req > 0 ? req : 1)
+    if (v.manage_inventory !== false && link?.inventory_item_id) tracked.add(v.id)
   }
+
   const requiredFor = (variantId: string) => requiredPerVariant.get(variantId) ?? 1
 
   /**
@@ -334,6 +364,10 @@ export async function computeFifoCosting(
    * No order-status filter: these counters ARE the physical truth, whatever the status says.
    */
   let partiallyFulfilledOrders = 0
+  // Sold, but stock isn't tracked for them — so there is no cost basis, and that is a different
+  // problem from "the shelf and the books disagree". Never conflate the two.
+  let untrackedUnits = 0
+  const untrackedVariants = new Set<string>()
   let offset = 0
   for (;;) {
     const { data } = await query.graph({
@@ -375,8 +409,15 @@ export async function computeFifoCosting(
         // Convert VARIANT units into the INVENTORY units the shelf is actually counted in —
         // the same multiplication Medusa does when it deducts stock.
         const consumed = (fulfilled - returned) * requiredFor(vid)
-
         if (consumed <= 0) continue
+
+        // Stock isn't tracked for this variant, so nothing left a shelf and no batch can cost
+        // it. Counting it would produce an "uncosted" warning that never goes away.
+        if (!tracked.has(vid)) {
+          untrackedUnits += consumed
+          untrackedVariants.add(vid)
+          continue
+        }
         consumptions.push({
           variant_id: vid,
           date: shippedAt, // FIFO ordering: what was on the shelf when it left
@@ -398,5 +439,7 @@ export async function computeFifoCosting(
 
   const result = replayFifo(batches ?? [], consumptions, range)
   result.partially_fulfilled_orders = partiallyFulfilledOrders
+  result.untracked_units = untrackedUnits
+  result.untracked_variants = untrackedVariants.size
   return result
 }
