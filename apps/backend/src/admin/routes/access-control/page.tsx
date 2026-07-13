@@ -350,6 +350,7 @@ function RolesSection({ canManage }: { canManage: boolean }) {
           Loading…
         </Text>
       ) : (
+        <div className="overflow-x-auto">
         <Table>
           <Table.Header>
             <Table.Row>
@@ -419,6 +420,7 @@ function RolesSection({ canManage }: { canManage: boolean }) {
             ))}
           </Table.Body>
         </Table>
+        </div>
       )}
 
       {/* Edit / view drawer */}
@@ -538,6 +540,7 @@ function TeamSection({ canManage }: { canManage: boolean }) {
           Loading…
         </Text>
       ) : (
+        <div className="overflow-x-auto">
         <Table>
           <Table.Header>
             <Table.Row>
@@ -594,6 +597,7 @@ function TeamSection({ canManage }: { canManage: boolean }) {
             ))}
           </Table.Body>
         </Table>
+        </div>
       )}
 
       <Drawer open={!!managing} onOpenChange={(open) => !open && setManaging(null)}>

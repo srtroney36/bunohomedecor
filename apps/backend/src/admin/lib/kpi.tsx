@@ -26,15 +26,22 @@ export function Kpi({
       : "text-ui-fg-base"
 
   return (
-    <div className="flex flex-col gap-y-1 rounded-lg border border-ui-border-base p-4">
-      <Text size="xsmall" className="text-ui-fg-muted">
+    // min-w-0 lets the tile shrink inside a grid track; without it a long money value forces
+    // the track wider than the screen and the whole page scrolls sideways. Value text steps up
+    // in size only on larger screens, and breaks rather than overflows on a phone.
+    <div className="flex flex-col gap-y-1 rounded-lg border border-ui-border-base p-3 sm:p-4 min-w-0">
+      <Text size="xsmall" className="text-ui-fg-muted break-words">
         {label}
       </Text>
-      <Text className={`${emphasis ? "text-2xl" : "text-xl"} font-semibold ${color}`}>
+      <Text
+        className={`${
+          emphasis ? "text-xl sm:text-2xl" : "text-lg sm:text-xl"
+        } font-semibold tabular-nums break-words ${color}`}
+      >
         {value}
       </Text>
       {hint && (
-        <Text size="xsmall" className="text-ui-fg-muted">
+        <Text size="xsmall" className="text-ui-fg-muted break-words">
           {hint}
         </Text>
       )}

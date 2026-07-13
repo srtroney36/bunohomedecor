@@ -190,7 +190,7 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
       {/* Courier fee → delivery margin */}
       <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
         <Label size="small">Courier fee (what they charge us)</Label>
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Select
             value={rateId}
             onValueChange={(v) => {
@@ -231,7 +231,7 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
       {/* Delivery charged (revenue) — the editable "overcharge" */}
       <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
         <Label size="small">Delivery charged (what the customer pays us)</Label>
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <Input
             type="number"
             min="0"
@@ -255,7 +255,7 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
       {isProduction && (
         <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
           <Label size="small">Production cost (this order's cost of goods)</Label>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             <Input
               type="number"
               min="0"

@@ -80,7 +80,7 @@ const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
               key={v.variant_id}
               className="flex flex-col gap-y-3 border-t border-ui-border-base pt-5 first:border-t-0 first:pt-0"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <div className="min-w-0">
                   <Text size="small" weight="plus" className="truncate">
                     {v.title}
@@ -91,7 +91,7 @@ const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
                     </Text>
                   )}
                 </div>
-                <div className="flex items-end gap-4">
+                <div className="flex flex-wrap items-end gap-4">
                   <div className="flex flex-col gap-y-1">
                     <Label size="small" className="text-ui-fg-muted">
                       Cost / unit (last batch)

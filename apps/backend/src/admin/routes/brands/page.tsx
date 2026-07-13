@@ -294,6 +294,7 @@ const BrandsPage = () => {
             </Text>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <Table>
             <Table.Header>
               <Table.Row>
@@ -373,6 +374,7 @@ const BrandsPage = () => {
               ))}
             </Table.Body>
           </Table>
+          </div>
         )}
       </Container>
     </div>

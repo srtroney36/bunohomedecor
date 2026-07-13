@@ -108,7 +108,7 @@ function TrackingWidget({ data: order }: DetailWidgetProps<HttpTypes.AdminOrder>
       })}
 
       {!allCancelled && (
-        <div className="px-6 py-4 flex items-center justify-between gap-x-3">
+        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
           <Text size="small" className="text-ui-fg-subtle">
             {alreadyReturned
               ? "This order was returned — items have been restocked."

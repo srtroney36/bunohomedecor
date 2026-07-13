@@ -39,8 +39,8 @@ const InventoryStockWidget = ({ data: item }: { data: { id: string } }) => {
         </Text>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-3">
-            <Text size="small" weight="plus" className="truncate">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Text size="small" weight="plus" className="truncate min-w-0">
               {variant.label}
             </Text>
             {variant.product_id && (

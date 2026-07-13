@@ -77,7 +77,7 @@ const OrderProcessingPage = () => {
 
   return (
     <div className="flex flex-col gap-y-4 p-4">
-      <Container className="flex flex-col gap-y-5 px-6 py-6">
+      <Container className="flex flex-col gap-y-5 px-4 py-4 sm:px-6 sm:py-6">
         <div>
           <Heading level="h1">Pre-orders</Heading>
           <Text size="small" className="text-ui-fg-subtle mt-1">
@@ -164,13 +164,13 @@ const OrderProcessingPage = () => {
             <Table.Header>
               <Table.Row>
                 <Table.HeaderCell>Order</Table.HeaderCell>
-                <Table.HeaderCell>Type</Table.HeaderCell>
+                <Table.HeaderCell className="hidden lg:table-cell">Type</Table.HeaderCell>
                 <Table.HeaderCell>Customer</Table.HeaderCell>
                 <Table.HeaderCell>Status</Table.HeaderCell>
-                <Table.HeaderCell>Payment</Table.HeaderCell>
-                <Table.HeaderCell>Issue</Table.HeaderCell>
+                <Table.HeaderCell className="hidden sm:table-cell">Payment</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell">Issue</Table.HeaderCell>
                 <Table.HeaderCell className="text-right">Total</Table.HeaderCell>
-                <Table.HeaderCell className="text-right">Delivery</Table.HeaderCell>
+                <Table.HeaderCell className="hidden md:table-cell text-right">Delivery</Table.HeaderCell>
                 <Table.HeaderCell className="text-right">Net</Table.HeaderCell>
               </Table.Row>
             </Table.Header>
@@ -190,18 +190,18 @@ const OrderProcessingPage = () => {
                     <Table.Cell className="whitespace-nowrap font-medium">
                       #{r.display_id}
                     </Table.Cell>
-                    <Table.Cell>
+                    <Table.Cell className="hidden lg:table-cell">
                       <Badge size="2xsmall" color={ORDER_TYPE_META[r.order_type].color}>
                         {ORDER_TYPE_META[r.order_type].label}
                       </Badge>
                     </Table.Cell>
-                    <Table.Cell className="max-w-[180px] truncate">{r.customer}</Table.Cell>
+                    <Table.Cell className="max-w-[140px] truncate sm:max-w-[180px]">{r.customer}</Table.Cell>
                     <Table.Cell>
                       <Badge size="2xsmall" color={os.color}>
                         {os.label}
                       </Badge>
                     </Table.Cell>
-                    <Table.Cell>
+                    <Table.Cell className="hidden sm:table-cell">
                       <Badge size="2xsmall" color={ps.color}>
                         {ps.label}
                       </Badge>
@@ -211,7 +211,7 @@ const OrderProcessingPage = () => {
                         </Text>
                       )}
                     </Table.Cell>
-                    <Table.Cell>
+                    <Table.Cell className="hidden md:table-cell">
                       {r.issue_status !== "none" && (
                         <Badge size="2xsmall" color={is.color}>
                           {is.label}
@@ -220,7 +220,7 @@ const OrderProcessingPage = () => {
                     </Table.Cell>
                     <Table.Cell className="text-right">{money(r.total, cur)}</Table.Cell>
                     <Table.Cell
-                      className={`text-right ${
+                      className={`hidden md:table-cell text-right ${
                         r.delivery_margin < 0 ? "text-ui-tag-red-text" : "text-ui-fg-subtle"
                       }`}
                     >

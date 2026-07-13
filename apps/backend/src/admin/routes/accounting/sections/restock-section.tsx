@@ -202,7 +202,7 @@ export function RestockSection() {
             </Button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(["restock", "found", "shrinkage"] as Mode[]).map((m) => (
               <Button
                 key={m}
@@ -286,7 +286,7 @@ export function RestockSection() {
             </div>
           )}
 
-          <div className="flex items-center justify-between rounded-lg bg-ui-bg-subtle p-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-ui-bg-subtle p-3">
             <Text size="small" className="text-ui-fg-subtle">
               {mode === "restock" && (
                 <>

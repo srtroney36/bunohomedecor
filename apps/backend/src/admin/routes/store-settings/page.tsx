@@ -254,13 +254,15 @@ const StoreSettingsPage = () => {
       </div>
 
       <Tabs value={active} onValueChange={setTab}>
-        <Tabs.List>
-          {tabs.map((t) => (
-            <Tabs.Trigger key={t.value} value={t.value}>
-              {t.label}
-            </Tabs.Trigger>
-          ))}
-        </Tabs.List>
+        <div className="overflow-x-auto">
+          <Tabs.List className="w-max">
+            {tabs.map((t) => (
+              <Tabs.Trigger key={t.value} value={t.value}>
+                {t.label}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+        </div>
 
         <div className="mt-4">
           <Tabs.Content value="integrations">

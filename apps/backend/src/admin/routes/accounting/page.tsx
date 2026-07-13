@@ -60,18 +60,21 @@ const AccountingPage = () => {
         </div>
       </div>
 
-      <div className="px-6 py-6">
+      <div className="px-4 py-4 sm:px-6 sm:py-6">
         <Tabs value={tab} onValueChange={setTab}>
-          <Tabs.List>
-            <Tabs.Trigger value="dashboard">Dashboard</Tabs.Trigger>
-            <Tabs.Trigger value="partners">Investment Pool</Tabs.Trigger>
-            <Tabs.Trigger value="fixed-assets">Fixed Assets</Tabs.Trigger>
-            <Tabs.Trigger value="restock">Restock</Tabs.Trigger>
-            <Tabs.Trigger value="packaging">Packaging</Tabs.Trigger>
-            <Tabs.Trigger value="marketing">Marketing</Tabs.Trigger>
-            <Tabs.Trigger value="operational">Operational Expenses</Tabs.Trigger>
-            <Tabs.Trigger value="cash-book">Cash Book</Tabs.Trigger>
-          </Tabs.List>
+          {/* Too many tabs to fit a phone — let the strip scroll sideways instead of the page. */}
+          <div className="overflow-x-auto">
+            <Tabs.List className="w-max">
+              <Tabs.Trigger value="dashboard">Dashboard</Tabs.Trigger>
+              <Tabs.Trigger value="partners">Investment Pool</Tabs.Trigger>
+              <Tabs.Trigger value="fixed-assets">Fixed Assets</Tabs.Trigger>
+              <Tabs.Trigger value="restock">Restock</Tabs.Trigger>
+              <Tabs.Trigger value="packaging">Packaging</Tabs.Trigger>
+              <Tabs.Trigger value="marketing">Marketing</Tabs.Trigger>
+              <Tabs.Trigger value="operational">Operational Expenses</Tabs.Trigger>
+              <Tabs.Trigger value="cash-book">Cash Book</Tabs.Trigger>
+            </Tabs.List>
+          </div>
 
           <div className="mt-6">
             <Tabs.Content value="dashboard">

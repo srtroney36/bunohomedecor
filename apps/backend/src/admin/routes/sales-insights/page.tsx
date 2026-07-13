@@ -116,7 +116,7 @@ const SalesInsightsPage = () => {
 
   return (
     <div className="flex flex-col gap-y-4 p-4">
-      <Container className="flex flex-col gap-y-5 px-6 py-6">
+      <Container className="flex flex-col gap-y-5 px-4 py-4 sm:px-6 sm:py-6">
         <div>
           <Heading level="h1">Sales Insights</Heading>
           <Text size="small" className="text-ui-fg-subtle mt-1">

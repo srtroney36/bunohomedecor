@@ -312,11 +312,11 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
 
   return (
     <div className="flex flex-col gap-y-3 rounded-lg border border-ui-border-base p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Text size="small" weight="plus">
           Stock
         </Text>
-        <div className="flex items-center gap-x-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Badge size="2xsmall" color={currentQty > 0 ? "green" : "grey"}>
             {isLoading ? "…" : `${currentQty} on shelf`}
           </Badge>
@@ -372,7 +372,7 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
       )}
 
       {/* mode toggle */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(["restock", "found", "shrinkage"] as Mode[]).map((m) => (
           <Button
             key={m}

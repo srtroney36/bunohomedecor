@@ -278,9 +278,9 @@ const ProductCardsPage = () => {
             { label: "Desktop", key: "desktop" as const, options: [3, 4, 5, 6] },
           ] as const
         ).map(({ label, key, options }) => (
-          <div key={key} className="flex items-center justify-between gap-x-4">
-            <Text size="small" className="text-ui-fg-subtle w-32 shrink-0">{label}</Text>
-            <div className="flex gap-x-2">
+          <div key={key} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <Text size="small" className="text-ui-fg-subtle w-24 shrink-0 sm:w-32">{label}</Text>
+            <div className="flex flex-wrap gap-2">
               {options.map((n) => {
                 const active = gridColumns[key] === n
                 return (

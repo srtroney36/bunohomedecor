@@ -298,7 +298,7 @@ const QuickOrderPage = () => {
 
   return (
     <div className="flex flex-col gap-y-4 p-4">
-      <Container className="px-6 py-6 flex flex-col gap-y-6">
+      <Container className="px-4 py-4 sm:px-6 sm:py-6 flex flex-col gap-y-6">
         <div>
           <Heading level="h1">New Order</Heading>
           <Text size="small" className="text-ui-fg-subtle mt-1">
@@ -382,9 +382,9 @@ const QuickOrderPage = () => {
               {isCustom ? "No items yet — add one above." : "No items yet — search above."}
             </Text>
           ) : (
-            <div className="flex flex-col gap-y-2">
-              {/* Column labels — so it's clear which number is the selling price */}
-              <div className="flex items-center gap-2 text-ui-fg-muted">
+            <div className="flex flex-col gap-y-3 sm:gap-y-2">
+              {/* Column labels — hidden on phones where each item stacks into its own card */}
+              <div className="hidden sm:flex items-center gap-2 text-ui-fg-muted">
                 <Text size="xsmall" className="flex-1">Item</Text>
                 <Text size="xsmall" className="w-16 text-center">Qty</Text>
                 <Text size="xsmall" className="w-28 text-center">Selling price</Text>
@@ -392,31 +392,60 @@ const QuickOrderPage = () => {
                 <span className="w-4" />
               </div>
               {lines.map((l) => (
-                <div key={l.key} className="flex items-center gap-2">
-                  {isCustom ? (
-                    <Input
-                      className="flex-1 min-w-0"
-                      placeholder="Item name"
-                      value={l.title}
-                      onChange={(e) => updateLine(l.key, { title: e.target.value })}
-                    />
-                  ) : (
-                    <Text size="small" className="flex-1 min-w-0 truncate">{l.title}</Text>
-                  )}
-                  <Input
-                    type="number" min={1} className="w-16"
-                    value={String(l.quantity)}
-                    onChange={(e) => updateLine(l.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
-                  />
-                  <Input
-                    type="number" min={0} className="w-28"
-                    value={String(l.unit_price)}
-                    onChange={(e) => updateLine(l.key, { unit_price: Math.max(0, Number(e.target.value) || 0) })}
-                  />
-                  <Text size="small" className="w-24 text-right text-ui-fg-subtle">{fmt(l.quantity * l.unit_price)}</Text>
-                  <button onClick={() => removeLine(l.key)} className="text-ui-fg-muted hover:text-ui-fg-error">
-                    <Trash className="w-4 h-4" />
-                  </button>
+                <div
+                  key={l.key}
+                  className="flex flex-col gap-2 rounded-lg border border-ui-border-base p-3 sm:flex-row sm:items-center sm:gap-2 sm:rounded-none sm:border-0 sm:p-0"
+                >
+                  {/* Row 1 on mobile: the item name (or label) + remove */}
+                  <div className="flex items-center gap-2 sm:flex-1 sm:min-w-0">
+                    {isCustom ? (
+                      <Input
+                        className="flex-1 min-w-0"
+                        placeholder="Item name"
+                        value={l.title}
+                        onChange={(e) => updateLine(l.key, { title: e.target.value })}
+                      />
+                    ) : (
+                      <Text size="small" className="flex-1 min-w-0 truncate">{l.title}</Text>
+                    )}
+                    <button
+                      onClick={() => removeLine(l.key)}
+                      className="shrink-0 text-ui-fg-muted hover:text-ui-fg-error sm:hidden"
+                      aria-label="Remove item"
+                    >
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Row 2 on mobile: qty × price = total, each labelled */}
+                  <div className="flex items-end gap-2 sm:contents">
+                    <label className="flex flex-1 flex-col gap-y-1 sm:w-16 sm:flex-none">
+                      <Text size="xsmall" className="text-ui-fg-muted sm:hidden">Qty</Text>
+                      <Input
+                        type="number" min={1}
+                        value={String(l.quantity)}
+                        onChange={(e) => updateLine(l.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                      />
+                    </label>
+                    <label className="flex flex-1 flex-col gap-y-1 sm:w-28 sm:flex-none">
+                      <Text size="xsmall" className="text-ui-fg-muted sm:hidden">Selling price</Text>
+                      <Input
+                        type="number" min={0}
+                        value={String(l.unit_price)}
+                        onChange={(e) => updateLine(l.key, { unit_price: Math.max(0, Number(e.target.value) || 0) })}
+                      />
+                    </label>
+                    <Text size="small" className="w-24 pb-2 text-right text-ui-fg-subtle sm:pb-0">
+                      {fmt(l.quantity * l.unit_price)}
+                    </Text>
+                    <button
+                      onClick={() => removeLine(l.key)}
+                      className="hidden shrink-0 pb-2 text-ui-fg-muted hover:text-ui-fg-error sm:block sm:pb-0"
+                      aria-label="Remove item"
+                    >
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
