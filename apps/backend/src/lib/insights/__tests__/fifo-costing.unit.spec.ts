@@ -167,6 +167,25 @@ describe("replayFifo", () => {
       expect(r.cogs_in_range).toBe(0)
     })
 
+    it("INVENTORY KITS: a variant that eats 50 units per sale consumes 50, not 1", () => {
+      /**
+       * The −49 bug. Medusa lets a variant require N inventory units per sale ("Requires 50 per
+       * variant"). The shelf is counted in INVENTORY units; an order line is in VARIANT units.
+       *
+       * Restock 50 → shelf 50. Sell ONE variant → Medusa deducts 50 → shelf 0.
+       * If we consume only the line quantity (1), the batch still claims 49 remaining while the
+       * shelf says 0 — and the next sale drives it to −50. The caller must pass the already-
+       * multiplied quantity, exactly as computeFifoCosting now does.
+       */
+      const r = replayFifo(
+        [batch(50, 20)], // 50 inventory units @ ৳20
+        [{ variant_id: "v1", date: d("2026-02-01"), qty: 1 * 50, kind: "sale" }]
+      )
+      expect(r.units_in_stock).toBe(0) // matches the shelf → NO drift
+      expect(r.cogs_in_range).toBe(50 * 20) // one sale really did cost 50 units of stock
+      expect(r.uncosted_units).toBe(0)
+    })
+
     it("reports COGS in the ORDER's period while drawing the batch available at SHIPPING", () => {
       // Ordered in Jan (revenue period), shipped in Feb. A batch that arrived in Feb — after the
       // order but before the shipment — must still be drawable, or a backorder reads "uncosted".

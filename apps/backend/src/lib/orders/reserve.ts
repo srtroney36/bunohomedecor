@@ -44,20 +44,32 @@ async function loadVariantInventoryMap(container: MedusaContainer, variantIds: s
       "manage_inventory",
       "allow_backorder",
       "inventory_items.inventory_item_id",
+      // How many INVENTORY units one of these eats. Usually 1, but Medusa allows a variant to
+      // consume N (an inventory kit). Ignore it and you reserve 1 unit for something that
+      // actually takes 50 off the shelf — which is how stock reaches −95.
+      "inventory_items.required_quantity",
     ],
     filters: { id: variantIds },
   })
 
   const map = new Map<
     string,
-    { itemId: string | null; manage: boolean; backorder: boolean; title: string }
+    {
+      itemId: string | null
+      manage: boolean
+      backorder: boolean
+      title: string
+      required: number
+    }
   >()
   for (const v of (data ?? []) as any[]) {
+    const req = num(v.inventory_items?.[0]?.required_quantity)
     map.set(v.id, {
       itemId: v.inventory_items?.[0]?.inventory_item_id ?? null,
       manage: v.manage_inventory !== false,
       backorder: !!v.allow_backorder,
       title: v.title ?? v.id,
+      required: req > 0 ? req : 1,
     })
   }
   return map
@@ -96,11 +108,15 @@ export async function checkAvailability(
     })
 
     const available = num(level?.stocked_quantity) - num(level?.reserved_quantity)
-    if (available < line.quantity) {
+    // The shelf is counted in INVENTORY units, so compare like with like: N of this variant
+    // takes N × required off the shelf.
+    const needed = line.quantity * v.required
+
+    if (available < needed) {
       problems.push({
         variant_id: line.variant_id,
         title: line.title ?? v.title,
-        requested: line.quantity,
+        requested: needed,
         available: Math.max(0, available),
       })
     }
@@ -175,7 +191,10 @@ export async function reserveOrderItems(
       line_item_id: it.id,
       inventory_item_id: v.itemId,
       location_id: location.id,
-      quantity: outstanding,
+      // Reservations are held in INVENTORY units, not variant units. Reserving 1 for a variant
+      // that consumes 50 holds nothing like enough, and the shortfall only shows up as negative
+      // stock once it ships.
+      quantity: outstanding * v.required,
     })
   }
 

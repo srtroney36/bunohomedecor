@@ -290,6 +290,33 @@ export async function computeFifoCosting(
   }))
 
   /**
+   * HOW MANY INVENTORY UNITS DOES ONE VARIANT EAT?
+   *
+   * Usually one. But Medusa lets a variant require N inventory units per sale (an "inventory
+   * kit" — a gift set that consumes 3 components, say). The admin shows it as
+   * "Requires N per variant".
+   *
+   * This matters enormously, because the two sides of our books count DIFFERENT THINGS:
+   *   - `stocked_quantity` (and therefore a restock, and therefore a batch) is in INVENTORY units
+   *   - an order line's `fulfilled_quantity` is in VARIANT units
+   *
+   * Medusa deducts `fulfilled_quantity × required_quantity` inventory units. If we consume only
+   * `fulfilled_quantity`, then a variant requiring 50 drifts by 50× on every single sale —
+   * restock 1, sell 1, and the shelf reads −49 while the batch still claims 1. Which is exactly
+   * what happened.
+   */
+  const { data: variantRows } = await query.graph({
+    entity: "product_variant",
+    fields: ["id", "inventory_items.required_quantity"],
+  })
+  const requiredPerVariant = new Map<string, number>()
+  for (const v of (variantRows ?? []) as any[]) {
+    const req = num(v.inventory_items?.[0]?.required_quantity)
+    requiredPerVariant.set(v.id, req > 0 ? req : 1)
+  }
+  const requiredFor = (variantId: string) => requiredPerVariant.get(variantId) ?? 1
+
+  /**
    * Sales OUT — driven by the numbers Medusa ACTUALLY moves stock by.
    *
    * `stocked_quantity` is adjusted in exactly three core workflows: create-fulfillment,
@@ -341,10 +368,13 @@ export async function computeFifoCosting(
         const ordered = num(it.detail?.quantity)
         const fulfilled = num(it.detail?.fulfilled_quantity)
         const returned = num(it.detail?.return_received_quantity)
-        const consumed = fulfilled - returned
 
         if (fulfilled > 0) anyShipped = true
         if (fulfilled < ordered) anyUnshipped = true
+
+        // Convert VARIANT units into the INVENTORY units the shelf is actually counted in —
+        // the same multiplication Medusa does when it deducts stock.
+        const consumed = (fulfilled - returned) * requiredFor(vid)
 
         if (consumed <= 0) continue
         consumptions.push({
