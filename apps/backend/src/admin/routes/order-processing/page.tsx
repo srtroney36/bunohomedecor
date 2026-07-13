@@ -2,60 +2,125 @@ import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { ShoppingBag } from "@medusajs/icons"
 import { Badge, Button, Container, Heading, Table, Text } from "@medusajs/ui"
 import { useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
 import { money } from "../../lib/kpi"
 import {
   ISSUE_STATUS_META,
   ORDER_STATUS_META,
   ORDER_STATUS_ORDER,
+  ORDER_TYPE_META,
   PAYMENT_STATUS_META,
   opApi,
   type OrderStatusKey,
 } from "../../lib/order-processing-api"
 
 /**
- * The ops queue. The team works left to right: New → Confirmed → In Production → Ready →
- * Booked → Dispatched → Delivered.
+ * The PRE-ORDERS queue — pre-order and custom orders that move through a production pipeline
+ * (New → Confirmed → In Production → Ready → Booked → Dispatched → Delivered). Ready-stock orders
+ * work like website orders and don't need this, but a filter can show them too.
  *
  * Every status here is the TRUTH, not a label someone remembered to update: anything from
  * Dispatched onwards is derived from Medusa itself, and payment status is derived from the money
- * that actually moved. If a colleague fulfils an order in Medusa's own screen, it appears in
- * "Dispatched" here without anyone touching it.
+ * that actually moved.
  */
+type TypeFilter = "production" | "ready_stock" | "all"
+
 const OrderProcessingPage = () => {
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("production")
   const [status, setStatus] = useState<OrderStatusKey | "all">("all")
 
+  /**
+   * Fetch every order ONCE (type=all), filter in the browser. Filtering is a view of data we
+   * already have, not a new question, so switching a tab should cost nothing — the request used
+   * to be re-fired on every click, which blanked the table and read as a glitch.
+   */
   const { data, isLoading } = useQuery({
-    queryKey: ["order-processing", status],
-    queryFn: () => opApi.list(status === "all" ? {} : { status }),
+    queryKey: ["order-processing", "all"],
+    queryFn: () => opApi.list({ type: "all" }),
   })
 
-  const rows = data?.orders ?? []
-  const counts = data?.counts ?? {}
-  const t = data?.totals
+  const everything = useMemo(() => data?.orders ?? [], [data])
+  const typeCounts = data?.type_counts ?? { ready_stock: 0, pre_order: 0, custom: 0 }
   const cur = "bdt"
+
+  // First narrow by type (the "Pre-orders" default = pre_order + custom), then by status.
+  const typeRows = useMemo(() => {
+    if (typeFilter === "all") return everything
+    if (typeFilter === "ready_stock") return everything.filter((r) => r.order_type === "ready_stock")
+    return everything.filter((r) => r.order_type === "pre_order" || r.order_type === "custom")
+  }, [everything, typeFilter])
+
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const r of typeRows) m[r.order_status] = (m[r.order_status] ?? 0) + 1
+    return m
+  }, [typeRows])
+
+  const rows = useMemo(
+    () => (status === "all" ? typeRows : typeRows.filter((r) => r.order_status === status)),
+    [typeRows, status]
+  )
+
+  // Totals follow whatever is on screen, so the money always matches the rows below it.
+  const t = useMemo(() => {
+    const sum = (f: (r: (typeof rows)[number]) => number) => rows.reduce((s, r) => s + f(r), 0)
+    return {
+      revenue: sum((r) => r.product_revenue),
+      delivery_margin: sum((r) => r.delivery_margin),
+      cogs: sum((r) => r.cogs),
+      packaging: sum((r) => r.packaging),
+      outstanding: sum((r) => r.outstanding),
+      net_profit: sum((r) => r.net_profit),
+    }
+  }, [rows])
 
   return (
     <div className="flex flex-col gap-y-4 p-4">
       <Container className="flex flex-col gap-y-5 px-6 py-6">
         <div>
-          <Heading level="h1">Order Processing</Heading>
+          <Heading level="h1">Pre-orders</Heading>
           <Text size="small" className="text-ui-fg-subtle mt-1">
-            Moving an order here <b>does the real thing</b> — Dispatched ships the goods and books
-            the cost, Delivered collects the cash, Returned puts stock back. Statuses are derived
-            from what actually happened, so they can't drift from Medusa.
+            Pre-orders and custom orders, worked through the production pipeline. Moving an order
+            here <b>does the real thing</b> — Dispatched ships and books the cost, Delivered
+            collects the cash. Statuses are derived from what actually happened, so they can't
+            drift from Medusa.
           </Text>
         </div>
 
-        {/* Queue tabs */}
+        {/* Type filter */}
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            size="small"
+            variant={typeFilter === "production" ? "primary" : "secondary"}
+            onClick={() => setTypeFilter("production")}
+          >
+            Pre-order &amp; Custom ({typeCounts.pre_order + typeCounts.custom})
+          </Button>
+          <Button
+            size="small"
+            variant={typeFilter === "ready_stock" ? "primary" : "secondary"}
+            onClick={() => setTypeFilter("ready_stock")}
+          >
+            Ready Stock ({typeCounts.ready_stock})
+          </Button>
+          <Button
+            size="small"
+            variant={typeFilter === "all" ? "primary" : "secondary"}
+            onClick={() => setTypeFilter("all")}
+          >
+            All ({typeCounts.ready_stock + typeCounts.pre_order + typeCounts.custom})
+          </Button>
+        </div>
+
+        {/* Status tabs */}
         <div className="flex flex-wrap gap-1.5">
           <Button
             size="small"
             variant={status === "all" ? "primary" : "secondary"}
             onClick={() => setStatus("all")}
           >
-            All {data ? `(${data.total})` : ""}
+            All ({typeRows.length})
           </Button>
           {ORDER_STATUS_ORDER.map((s) => (
             <Button
@@ -99,6 +164,7 @@ const OrderProcessingPage = () => {
             <Table.Header>
               <Table.Row>
                 <Table.HeaderCell>Order</Table.HeaderCell>
+                <Table.HeaderCell>Type</Table.HeaderCell>
                 <Table.HeaderCell>Customer</Table.HeaderCell>
                 <Table.HeaderCell>Status</Table.HeaderCell>
                 <Table.HeaderCell>Payment</Table.HeaderCell>
@@ -123,6 +189,11 @@ const OrderProcessingPage = () => {
                   >
                     <Table.Cell className="whitespace-nowrap font-medium">
                       #{r.display_id}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Badge size="2xsmall" color={ORDER_TYPE_META[r.order_type].color}>
+                        {ORDER_TYPE_META[r.order_type].label}
+                      </Badge>
                     </Table.Cell>
                     <Table.Cell className="max-w-[180px] truncate">{r.customer}</Table.Cell>
                     <Table.Cell>
@@ -167,7 +238,7 @@ const OrderProcessingPage = () => {
               })}
               {!isLoading && rows.length === 0 && (
                 <Table.Row>
-                  <Table.Cell colSpan={8}>
+                  <Table.Cell colSpan={9}>
                     <Text size="small" className="py-6 text-ui-fg-muted">
                       Nothing in this queue.
                     </Text>

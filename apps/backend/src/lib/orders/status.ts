@@ -1,8 +1,9 @@
 import {
-  ALLOWED_TRANSITIONS,
+  allowedTransitions,
   type IssueStatus,
   type OrderPaymentStatus,
   type OrderStatus,
+  type OrderType,
   type StoredStage,
 } from "../../modules/orderProcessing/constants"
 
@@ -98,11 +99,18 @@ export type TransitionCheck = { ok: boolean; reason?: string }
 /**
  * May this order move to `to`? Guards exist so a stray click can't corrupt the books — you
  * cannot deliver an order that never shipped, and you cannot dispatch one nobody confirmed.
+ *
+ * The type matters: a ready-stock order has no production stages, so "in production" is not a
+ * legal move for it, while "confirmed → dispatched" is.
  */
-export function canTransition(from: OrderStatus, to: OrderStatus): TransitionCheck {
+export function canTransition(
+  type: OrderType,
+  from: OrderStatus,
+  to: OrderStatus
+): TransitionCheck {
   if (from === to) return { ok: false, reason: `The order is already ${to.replace(/_/g, " ")}.` }
 
-  const allowed = ALLOWED_TRANSITIONS[from] ?? []
+  const allowed = allowedTransitions(type, from)
   if (!allowed.includes(to)) {
     return {
       ok: false,

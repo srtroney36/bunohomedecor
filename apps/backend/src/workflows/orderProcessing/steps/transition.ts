@@ -70,7 +70,7 @@ export const transitionOrderStep = createStep(
     }
 
     const from = econ.order_status
-    const check = canTransition(from, input.to)
+    const check = canTransition(econ.order_type, from, input.to)
     if (!check.ok) {
       throw new MedusaError(MedusaError.Types.NOT_ALLOWED, check.reason!)
     }

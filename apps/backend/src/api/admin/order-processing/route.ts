@@ -10,17 +10,28 @@ import { ORDER_STATUSES } from "../../../modules/orderProcessing/constants"
  * back too, so the tabs can show how much work is sitting in each stage.
  */
 export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) {
-  const { status, issue, payment, from, to } = req.query as Record<string, string | undefined>
+  const { status, issue, payment, type, from, to } = req.query as Record<
+    string,
+    string | undefined
+  >
 
-  const rows = await computeOrderEconomics(req.scope, {
+  const all = await computeOrderEconomics(req.scope, {
     from: from ? new Date(from) : undefined,
     to: to ? new Date(`${to}T23:59:59.999Z`) : undefined,
   })
 
-  // Counts are over everything in range, not the filtered view — otherwise the tab you're on
-  // would always read "all of them" and the others zero.
+  /**
+   * The "Pre-orders" queue defaults to pre_order + custom (that's what actually needs working
+   * through a production pipeline). `type=all` opens it up to ready-stock too, and a single type
+   * narrows it. Counts and totals reflect the type view, so the numbers match what's on screen.
+   */
+  const rows = type === "all" ? all : type ? all.filter((r) => r.order_type === type) : all
+
+  // Counts are over everything in the (type-scoped) range, not the status-filtered view.
   const counts: Record<string, number> = Object.fromEntries(ORDER_STATUSES.map((s) => [s, 0]))
   for (const r of rows) counts[r.order_status] = (counts[r.order_status] ?? 0) + 1
+  const type_counts = { ready_stock: 0, pre_order: 0, custom: 0 } as Record<string, number>
+  for (const r of all) type_counts[r.order_type] = (type_counts[r.order_type] ?? 0) + 1
 
   let filtered = rows
   if (status) filtered = filtered.filter((r) => r.order_status === status)
@@ -32,6 +43,7 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   res.json({
     orders: filtered,
     counts,
+    type_counts,
     total: rows.length,
     totals: {
       revenue: filtered.reduce((s, r) => s + r.product_revenue, 0),

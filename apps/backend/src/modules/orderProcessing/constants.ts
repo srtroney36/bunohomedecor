@@ -27,6 +27,56 @@
  * surface, not a sticker — which is the only way it can stay honest.
  */
 
+/* ------------------------------------ order type ----------------------------------- */
+
+/**
+ * HOW the order was sold — and it changes almost everything downstream: whether stock is
+ * touched, how cost of goods is worked out, and which stages the pipeline offers.
+ *
+ *   ready_stock — off the shelf. Website orders and normal manual orders. Reserves and cuts
+ *                 real inventory; cost of goods comes from the FIFO batches.
+ *   pre_order   — sold before it's made. Never touches inventory (the goods don't exist yet);
+ *                 cost is a per-order production cost you enter. Full production pipeline.
+ *   custom      — made to order, not in the catalogue at all. Same as pre_order, but the line
+ *                 items are free-form rather than a catalogue product.
+ *
+ * The load-bearing rule: pre_order and custom line items carry NO variant_id, so Medusa never
+ * reserves or deducts stock for them. That is what makes "ship directly, cost per order" safe.
+ */
+export const ORDER_TYPES = ["ready_stock", "pre_order", "custom"] as const
+export type OrderType = (typeof ORDER_TYPES)[number]
+
+export const ORDER_TYPE_META: Record<
+  OrderType,
+  { label: string; color: "grey" | "blue" | "purple"; touches_inventory: boolean; help: string }
+> = {
+  ready_stock: {
+    label: "Ready Stock",
+    color: "grey",
+    touches_inventory: true,
+    help: "Sold off the shelf. Reserves and cuts real inventory; costed from your FIFO batches.",
+  },
+  pre_order: {
+    label: "Pre-order",
+    color: "blue",
+    touches_inventory: false,
+    help:
+      "Sold before it's made. No inventory is touched — you enter what it cost to produce, and " +
+      "it moves through the production pipeline before it ships.",
+  },
+  custom: {
+    label: "Custom",
+    color: "purple",
+    touches_inventory: false,
+    help:
+      "Made to order and not in your catalogue. Free-form items, a per-order production cost, " +
+      "and the same production pipeline as a pre-order.",
+  },
+}
+
+/** The two types that skip inventory entirely and cost per order. */
+export const PRODUCTION_TYPES: OrderType[] = ["pre_order", "custom"]
+
 /* ----------------------------------- order status ---------------------------------- */
 
 export const ORDER_STATUSES = [
@@ -97,6 +147,38 @@ export const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   on_hold:           ["confirmed", "in_production", "ready_to_dispatch", "cancelled"],
   cancelled:         [],
   refunded:          [],
+}
+
+/**
+ * The production stages only exist for pre-order/custom. A ready-stock order goes straight from
+ * confirmed to dispatched — there is nothing to "produce". Offering those buttons on a
+ * ready-stock order would be inviting a meaningless click, so we strip them per type.
+ */
+const PRODUCTION_ONLY_STATUSES: OrderStatus[] = [
+  "in_production",
+  "ready_to_dispatch",
+  "courier_booked",
+]
+
+/**
+ * What THIS type of order may do next. Same guards as ALLOWED_TRANSITIONS, minus the production
+ * stages for ready-stock. Confirmed → dispatched becomes valid for ready-stock, because there's
+ * no production step in between.
+ */
+export function allowedTransitions(type: OrderType, from: OrderStatus): OrderStatus[] {
+  const base = ALLOWED_TRANSITIONS[from] ?? []
+  if (PRODUCTION_TYPES.includes(type)) return base
+
+  // Ready-stock: drop the production stages, and let "confirmed" reach "dispatched" directly.
+  const stripped = base.filter((s) => !PRODUCTION_ONLY_STATUSES.includes(s))
+  if (from === "confirmed" && !stripped.includes("dispatched")) stripped.unshift("dispatched")
+  return stripped
+}
+
+/** Stored stages offered for a type — powers the stage dropdown, per type. */
+export function storedStagesFor(type: OrderType): StoredStage[] {
+  if (PRODUCTION_TYPES.includes(type)) return [...STORED_STAGES]
+  return STORED_STAGES.filter((s) => !PRODUCTION_ONLY_STATUSES.includes(s as OrderStatus))
 }
 
 /* ---------------------------------- payment status --------------------------------- */

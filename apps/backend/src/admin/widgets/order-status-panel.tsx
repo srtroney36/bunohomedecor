@@ -19,6 +19,7 @@ import { money } from "../lib/kpi"
 import {
   ISSUE_STATUS_META,
   ORDER_STATUS_META,
+  ORDER_TYPE_META,
   PAYMENT_STATUS_META,
   TRANSITION_EFFECT,
   opApi,
@@ -46,12 +47,17 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
   const [pending, setPending] = useState<OrderStatusKey | null>(null)
   const [fee, setFee] = useState("")
   const [rateId, setRateId] = useState<string>("")
+  const [deliveryCharged, setDeliveryCharged] = useState("")
+  const [prodCost, setProdCost] = useState("")
 
   const o = data?.order
 
   useEffect(() => {
-    if (o) setFee(String(o.courier_cost ?? 0))
-  }, [o?.courier_cost]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!o) return
+    setFee(String(o.courier_cost ?? 0))
+    setDeliveryCharged(String(o.delivery_charged ?? 0))
+    setProdCost(String(o.production_cost ?? 0))
+  }, [o?.courier_cost, o?.delivery_charged, o?.production_cost]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["order-processing"] })
@@ -94,16 +100,37 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
     onError: (e: Error) => toast.error(e.message),
   })
 
+  const saveDelivery = useMutation({
+    mutationFn: () => opApi.update(orderId, { delivery_charged: Number(deliveryCharged) || 0 }),
+    onSuccess: () => {
+      toast.success("Delivery charge updated — revenue recalculated")
+      refresh()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  const saveProdCost = useMutation({
+    mutationFn: () => opApi.update(orderId, { production_cost: Number(prodCost) || 0 }),
+    onSuccess: () => {
+      toast.success("Production cost updated — this order's COGS recalculated")
+      refresh()
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   if (isLoading || !o) return null
 
   const os = ORDER_STATUS_META[o.order_status]
   const ps = PAYMENT_STATUS_META[o.payment_status]
   const is = ISSUE_STATUS_META[o.issue_status]
+  const ot = ORDER_TYPE_META[o.order_type]
+  const isProduction = o.order_type !== "ready_stock"
   const next = data?.allowed_next ?? []
   const rates = data?.courier_rates ?? []
 
   const feeNum = Number(fee) || 0
-  const margin = o.delivery_charged - feeNum
+  const deliveryNum = Number(deliveryCharged) || 0
+  const margin = deliveryNum - feeNum
 
   return (
     <Container className="flex flex-col gap-y-4 px-6 py-6">
@@ -116,6 +143,9 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
 
       {/* Current state */}
       <div className="flex flex-wrap items-center gap-2">
+        <Badge size="small" color={ot.color}>
+          {ot.label}
+        </Badge>
         <Badge size="small" color={os.color}>
           {os.label}
         </Badge>
@@ -193,10 +223,62 @@ const OrderStatusPanel = ({ data: order }: DetailWidgetProps<HttpTypes.AdminOrde
           </Button>
         </div>
         <Text size="xsmall" className={margin < 0 ? "text-ui-tag-red-text" : "text-ui-fg-muted"}>
-          Charged the customer {money(o.delivery_charged, cur)} · costs us {money(feeNum, cur)} ·{" "}
+          Charged the customer {money(deliveryNum, cur)} · costs us {money(feeNum, cur)} ·{" "}
           <b>delivery {margin >= 0 ? "makes" : "loses"} {money(Math.abs(margin), cur)}</b>
         </Text>
       </div>
+
+      {/* Delivery charged (revenue) — the editable "overcharge" */}
+      <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
+        <Label size="small">Delivery charged (what the customer pays us)</Label>
+        <div className="flex items-end gap-2">
+          <Input
+            type="number"
+            min="0"
+            step="1"
+            className="w-28"
+            value={deliveryCharged}
+            onChange={(e) => setDeliveryCharged(e.target.value)}
+          />
+          <Button
+            size="small"
+            variant="secondary"
+            onClick={() => saveDelivery.mutate()}
+            isLoading={saveDelivery.isPending}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+
+      {/* Production cost — pre-order / custom only */}
+      {isProduction && (
+        <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">
+          <Label size="small">Production cost (this order's cost of goods)</Label>
+          <div className="flex items-end gap-2">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              className="w-28"
+              value={prodCost}
+              onChange={(e) => setProdCost(e.target.value)}
+            />
+            <Button
+              size="small"
+              variant="secondary"
+              onClick={() => saveProdCost.mutate()}
+              isLoading={saveProdCost.isPending}
+            >
+              Save
+            </Button>
+          </div>
+          <Text size="xsmall" className="text-ui-fg-muted">
+            What it cost to make. Booked to the Cash Book and used as this order's COGS. Editable
+            any time — the P&amp;L recomputes.
+          </Text>
+        </div>
+      )}
 
       {/* Issue */}
       <div className="flex flex-col gap-y-2 border-t border-ui-border-base pt-4">

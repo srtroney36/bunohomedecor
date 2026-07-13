@@ -25,6 +25,8 @@ export type HealthIssue = {
     | "uncosted_stock"
     | "negative_stock"
     | "unreserved_orders"
+    | "kit_quantity"
+    | "not_stock_managed"
   /** What is broken, in plain terms. */
   message: string
   /** Exactly where to go to fix it. */
@@ -181,6 +183,75 @@ export async function inspectStockHealth(container: MedusaContainer): Promise<St
       fix_where:
         "Open each order and allocate it, or re-create it. Orders created from now on reserve " +
         "stock automatically.",
+      blocking: false,
+    })
+  }
+
+  /**
+   * 5) Product setup mistakes — the ones that quietly wreck stock.
+   *
+   * `required_quantity` is how many units of stock ONE sale consumes. It's set during product
+   * creation under "Inventory kit", and it's dangerously easy to type your stock quantity there
+   * (50) when it's asking how many units a sale eats (1). Get it wrong and one order takes 50
+   * off the shelf — which is how stock reached −95 here.
+   *
+   * A value above 1 is legitimate for a genuine kit, so this can't be an error. But it must be
+   * visible, because nothing else about the product looks wrong.
+   */
+  const { data: variants } = await query.graph({
+    entity: "product_variant",
+    fields: [
+      "id",
+      "title",
+      "sku",
+      "manage_inventory",
+      "product.title",
+      "inventory_items.inventory_item_id",
+      "inventory_items.required_quantity",
+    ],
+  })
+
+  const kits: string[] = []
+  const unmanaged: string[] = []
+
+  for (const v of (variants ?? []) as any[]) {
+    const label = v.product?.title ? `${v.product.title} — ${v.title}` : (v.sku ?? v.title ?? v.id)
+    const link = v.inventory_items?.[0]
+
+    if (v.manage_inventory === false || !link?.inventory_item_id) {
+      unmanaged.push(label)
+      continue
+    }
+    const req = Number(link.required_quantity ?? 1)
+    if (req !== 1) kits.push(`${label} (requires ${req})`)
+  }
+
+  if (kits.length) {
+    issues.push({
+      code: "kit_quantity",
+      message:
+        `${kits.length} variant(s) consume MORE THAN ONE unit of stock per sale: ` +
+        `${kits.slice(0, 4).join(", ")}${kits.length > 4 ? "…" : ""}. If that isn't deliberate ` +
+        `it's a setup slip — one sale will take that many units off the shelf, and stock will ` +
+        `crash toward zero and go negative.`,
+      fix_where:
+        'Products → the product → the variant → Inventory → set "Requires per variant" to 1 ' +
+        "(unless it really is a kit built from multiple units).",
+      blocking: false,
+    })
+  }
+
+  if (unmanaged.length) {
+    issues.push({
+      code: "not_stock_managed",
+      message:
+        `${unmanaged.length} variant(s) have no stock tracking: ` +
+        `${unmanaged.slice(0, 4).join(", ")}${unmanaged.length > 4 ? "…" : ""}. They can't be ` +
+        `reserved, can't be counted, and carry no cost of goods — so they can be oversold ` +
+        `without limit and their profit reads too high.`,
+      fix_where:
+        "If they're physical products, turn ON Manage inventory on the variant, then restock " +
+        "them. Leave it off only for made-to-order items, services or digital goods.",
       blocking: false,
     })
   }

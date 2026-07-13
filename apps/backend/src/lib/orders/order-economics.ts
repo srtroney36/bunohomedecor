@@ -9,11 +9,13 @@ import {
   resolveOrderStatus,
   type OrderFacts,
 } from "./status"
-import type {
-  IssueStatus,
-  OrderPaymentStatus,
-  OrderStatus,
-  StoredStage,
+import {
+  PRODUCTION_TYPES,
+  type IssueStatus,
+  type OrderPaymentStatus,
+  type OrderStatus,
+  type OrderType,
+  type StoredStage,
 } from "../../modules/orderProcessing/constants"
 
 /**
@@ -35,6 +37,9 @@ export type OrderEconomics = {
   customer: string
   currency_code: string
 
+  // How it was sold — drives costing and which pipeline stages apply.
+  order_type: OrderType
+
   // Statuses — all derived except the stage/issue we legitimately own.
   order_status: OrderStatus
   payment_status: OrderPaymentStatus
@@ -48,6 +53,8 @@ export type OrderEconomics = {
 
   // What it costs
   cogs: number
+  /** For pre-order/custom: what production cost. (For ready-stock this is 0; COGS is FIFO.) */
+  production_cost: number
   packaging: number
   courier_cost: number
   /** Goods destroyed in transit — a real loss, never restocked. */
@@ -181,9 +188,11 @@ export async function computeOrderEconomics(
 
   return orders.map((o: any): OrderEconomics => {
     const wf = wfByOrder.get(o.id)
+    const orderType: OrderType = (wf?.order_type as OrderType) ?? "ready_stock"
     const stage: StoredStage = (wf?.stage as StoredStage) ?? "new_order"
     const issue: IssueStatus = (wf?.issue_status as IssueStatus) ?? "none"
     const isCod = wf ? Boolean(wf.is_cod) : true
+    const isProduction = PRODUCTION_TYPES.includes(orderType)
 
     /**
      * Cash: only money that actually moved.
@@ -238,8 +247,22 @@ export async function computeOrderEconomics(
 
     // ── The money ────────────────────────────────────────────────────────────
     const productRevenue = Math.max(0, num(o.item_total) - returnedValue)
-    const deliveryCharged = num(o.shipping_total)
-    const cogs = fifo.cogs_by_ref.get(o.id) ?? 0
+
+    /**
+     * Delivery charged is the revenue side. Use the per-order override when set (the
+     * "overcharge" — what you actually billed), otherwise Medusa's shipping_total.
+     */
+    const deliveryCharged =
+      wf?.delivery_charged != null ? num(wf.delivery_charged) : num(o.shipping_total)
+
+    const productionCost = num(wf?.production_cost)
+
+    /**
+     * COGS depends on the type. Ready-stock draws real inventory, so the cost is what the FIFO
+     * batches say. Pre-order/custom never touch inventory (no batch to draw from) — the cost is
+     * the production cost entered on the order.
+     */
+    const cogs = isProduction ? productionCost : (fifo.cogs_by_ref.get(o.id) ?? 0)
     const courierCost = num(wf?.courier_fee)
 
     // Damaged goods never came back, so their cost is a straight loss on top of everything else.
@@ -261,6 +284,7 @@ export async function computeOrderEconomics(
       customer: name,
       currency_code: o.currency_code ?? "bdt",
 
+      order_type: orderType,
       order_status: orderStatus,
       payment_status: paymentStatus,
       issue_status: issue,
@@ -271,6 +295,7 @@ export async function computeOrderEconomics(
       total: num(o.total),
 
       cogs,
+      production_cost: productionCost,
       packaging,
       courier_cost: courierCost,
       write_off: writeOff,

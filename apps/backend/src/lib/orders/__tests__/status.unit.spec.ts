@@ -99,26 +99,44 @@ describe("resolveOrderStatus — Medusa's truth always beats our stored stage", 
   })
 })
 
-describe("canTransition", () => {
+describe("canTransition (pre-order / custom — full pipeline)", () => {
   it("blocks delivering an order that never shipped", () => {
-    const r = canTransition("confirmed", "delivered")
+    const r = canTransition("pre_order", "confirmed", "delivered")
     expect(r.ok).toBe(false)
     expect(r.reason).toMatch(/can't go straight to/i)
   })
 
-  it("allows the normal path", () => {
-    expect(canTransition("new_order", "confirmed").ok).toBe(true)
-    expect(canTransition("ready_to_dispatch", "courier_booked").ok).toBe(true)
-    expect(canTransition("dispatched", "delivered").ok).toBe(true)
+  it("allows the full production path", () => {
+    expect(canTransition("pre_order", "new_order", "confirmed").ok).toBe(true)
+    expect(canTransition("pre_order", "confirmed", "in_production").ok).toBe(true)
+    expect(canTransition("custom", "ready_to_dispatch", "courier_booked").ok).toBe(true)
+    expect(canTransition("pre_order", "dispatched", "delivered").ok).toBe(true)
   })
 
   it("allows an RTO — cancelling after dispatch", () => {
-    expect(canTransition("dispatched", "cancelled").ok).toBe(true)
+    expect(canTransition("pre_order", "dispatched", "cancelled").ok).toBe(true)
   })
 
   it("treats cancelled and refunded as final", () => {
-    expect(canTransition("cancelled", "confirmed").ok).toBe(false)
-    expect(canTransition("refunded", "delivered").ok).toBe(false)
+    expect(canTransition("pre_order", "cancelled", "confirmed").ok).toBe(false)
+    expect(canTransition("custom", "refunded", "delivered").ok).toBe(false)
+  })
+})
+
+describe("canTransition (ready_stock — no production stages)", () => {
+  it("has NO production stage: confirmed goes straight to dispatched", () => {
+    expect(canTransition("ready_stock", "confirmed", "dispatched").ok).toBe(true)
+  })
+
+  it("REFUSES production stages that don't apply to ready-stock", () => {
+    expect(canTransition("ready_stock", "confirmed", "in_production").ok).toBe(false)
+    expect(canTransition("ready_stock", "confirmed", "ready_to_dispatch").ok).toBe(false)
+  })
+
+  it("still runs the normal shipping path", () => {
+    expect(canTransition("ready_stock", "new_order", "confirmed").ok).toBe(true)
+    expect(canTransition("ready_stock", "dispatched", "delivered").ok).toBe(true)
+    expect(canTransition("ready_stock", "dispatched", "cancelled").ok).toBe(true)
   })
 })
 

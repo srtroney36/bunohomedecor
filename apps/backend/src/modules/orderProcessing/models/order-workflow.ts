@@ -1,6 +1,6 @@
 import { model } from "@medusajs/framework/utils"
 
-import { ISSUE_STATUSES, STORED_STAGES } from "../constants"
+import { ISSUE_STATUSES, ORDER_TYPES, STORED_STAGES } from "../constants"
 
 /**
  * The business layer on top of a Medusa order — and ONLY the parts Medusa doesn't already know.
@@ -18,6 +18,12 @@ const OrderWorkflow = model
     id: model.id({ prefix: "opw" }).primaryKey(),
 
     order_id: model.text().unique(),
+
+    /**
+     * HOW it was sold. Drives whether stock is touched, how COGS is worked out, and which
+     * stages the pipeline offers. Website orders default to ready_stock. See constants.ts.
+     */
+    order_type: model.enum([...ORDER_TYPES]).default("ready_stock"),
 
     /**
      * The stored stage — a step that exists purely inside the business. Once goods physically
@@ -46,6 +52,21 @@ const OrderWorkflow = model
      */
     courier_fee: model.bigNumber().default(0),
     courier_rate_id: model.text().nullable(),
+
+    /**
+     * PRE-ORDER & CUSTOM only: what it cost to produce. These never enter inventory, so there is
+     * no FIFO batch to draw a cost from — this IS the order's cost of goods. Editable at any
+     * time (a production estimate at order time, corrected once you know the real cost), and
+     * every edit re-flows through the books because all the figures are derived.
+     */
+    production_cost: model.bigNumber().default(0),
+
+    /**
+     * The delivery amount actually CHARGED to the customer (revenue side). Null means "use
+     * Medusa's shipping_total". Set it when what you charged differs from the default — the
+     * "delivery overcharge". Editable any time; revenue and delivery margin recompute from it.
+     */
+    delivery_charged: model.bigNumber().nullable(),
 
     note: model.text().nullable(),
   })

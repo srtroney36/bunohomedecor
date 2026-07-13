@@ -44,10 +44,12 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
   const other_income = pnlIncome(rows)
 
   /**
-   * Courier fees are now booked per order, so they're already in `courier_cost`. Subtracting the
-   * ledger's courier_fee total again would charge for every parcel twice.
+   * Both courier fees AND production costs are booked per order and already counted here —
+   * courier_fee inside `courier_cost`, production_cost inside `cogs`. They also land in the
+   * ledger (that's how the accounting dashboard sees them), so we strip both from ledger
+   * overhead or every pre-order/custom order would be charged for its production twice.
    */
-  const overhead = exp.total - exp.courier_fee
+  const overhead = exp.total - exp.courier_fee - exp.production_cost
 
   const net_profit =
     gross_profit + delivery_margin + other_income - packaging - write_off - overhead

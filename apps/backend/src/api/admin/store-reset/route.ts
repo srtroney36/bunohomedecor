@@ -106,6 +106,19 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   const wantCustomers = wantEverything || Boolean(body.customers?.enabled)
   const wantProducts = wantEverything
 
+  /**
+   * Delete the LOGIN IDENTITIES too, not just the customer rows.
+   *
+   * This is the bug that locked everyone out. A customer row and the auth identity that logs
+   * into it are two different records. Deleting only the customer leaves the identity behind,
+   * so the email is still registered (sign-up says "already exists") while the customer it
+   * points at is gone (sign-in resolves to nothing). The account becomes a ghost: you can
+   * neither log into it nor recreate it.
+   *
+   * "Reset everything" must mean everything, so it always takes the identities with it.
+   */
+  const wantIdentities = wantEverything || Boolean(body.customers?.identities)
+
   if (!wantInventory && !wantOrders && !wantCustomers && !wantAccounting) {
     return res.status(400).json({ error: "Select at least one thing to reset." })
   }
@@ -231,7 +244,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
       }
 
       let identitiesDeleted = 0
-      if (body.customers?.identities && customerIds.length) {
+      if (wantIdentities && customerIds.length) {
         try {
           const auth = req.scope.resolve(Modules.AUTH) as any
           const customerIdSet = new Set(customerIds)

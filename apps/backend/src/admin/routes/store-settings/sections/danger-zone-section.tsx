@@ -61,7 +61,16 @@ export function DangerZoneSection() {
       } else {
         toast.warning(`Reset ran with some errors: ${Object.entries(result.errors).map(([k, v]) => `${k}: ${v}`).join("; ")}`)
       }
+
+      // Back to the starting position. Leaving the switches armed after a run invites someone to
+      // hit a destructive button again thinking it's a fresh form.
       setConfirmText("")
+      setInvEnabled(false)
+      setOrdersEnabled(false)
+      setCustEnabled(false)
+      setCustMode("accounts")
+      setAcctEnabled(false)
+      setEverything(false)
     } catch (err: any) {
       toast.error(err.message || "Reset failed")
     } finally {

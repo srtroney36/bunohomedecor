@@ -41,6 +41,10 @@ export const LEDGER_CATEGORIES = [
   "courier_fee",
   "other_expense",
   "refund",
+  // What a pre-order/custom order cost to produce. Unlike a restock (an asset that becomes COGS
+  // when it sells), made-to-order goods ship immediately, so their cost is an expense straight
+  // away — and it is that order's cost of goods.
+  "production_cost",
 
   // Real P&L income that Medusa knows nothing about: a courier paying you back for a parcel
   // they destroyed, scrap sales, supplier credits. Without this there is literally nowhere to
@@ -126,6 +130,14 @@ export const CATEGORY_META: Record<LedgerCategory, CategoryMeta> = {
       "ONLY for cash you refunded outside Medusa. A return recorded in Medusa has already been " +
       "netted out of revenue and cash — journaling it here as well subtracts it twice.",
   },
+  production_cost: {
+    label: "Production cost (pre-order / custom)",
+    klass: "expense",
+    direction: "out",
+    help:
+      "What a made-to-order item cost to produce. Booked from the order itself, not here — it " +
+      "is that order's cost of goods and reduces its profit directly.",
+  },
   other_income: {
     label: "Other income",
     klass: "income",
@@ -170,6 +182,8 @@ export const REGISTER_OWNED_CATEGORIES: LedgerCategory[] = [
   "fixed_asset",
   "marketing",
   "inventory_purchase",
+  // Always tied to a specific pre-order/custom order — set on the order, never in the Cash Book.
+  "production_cost",
 ]
 
 /** Where each restricted category is actually created — used in the rejection message. */
@@ -177,6 +191,7 @@ export const CATEGORY_ENTRY_POINT: Partial<Record<LedgerCategory, string>> = {
   fixed_asset: "the Fixed Assets tab",
   marketing: "the Marketing tab",
   inventory_purchase: "the Restock tab",
+  production_cost: "the order's production cost field",
 }
 
 export const LEDGER_SOURCE_TYPES = [
@@ -189,6 +204,10 @@ export const LEDGER_SOURCE_TYPES = [
   // The courier fee for one order, mirrored from Order Processing. Keyed to the order, so
   // correcting the fee updates its row instead of adding a second one.
   "order",
+  // The production cost of one pre-order/custom order. A SEPARATE source type from "order" so a
+  // single order can carry both its courier fee and its production cost (the unique index is on
+  // source_type + source_id, so they'd collide under the same type).
+  "production",
 ] as const
 export type LedgerSourceType = (typeof LEDGER_SOURCE_TYPES)[number]
 

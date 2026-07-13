@@ -15,7 +15,18 @@ export type PaymentStatusKey =
 export type IssueStatusKey =
   | "none" | "returned" | "damaged" | "wrong_product" | "exchange_requested" | "refunded"
 
+export type OrderTypeKey = "ready_stock" | "pre_order" | "custom"
+
 type Color = "grey" | "blue" | "green" | "orange" | "red" | "purple"
+
+export const ORDER_TYPE_META: Record<
+  OrderTypeKey,
+  { label: string; color: Color; touchesInventory: boolean }
+> = {
+  ready_stock: { label: "Ready Stock", color: "grey", touchesInventory: true },
+  pre_order: { label: "Pre-order", color: "blue", touchesInventory: false },
+  custom: { label: "Custom", color: "purple", touchesInventory: false },
+}
 
 export const ORDER_STATUS_META: Record<OrderStatusKey, { label: string; color: Color }> = {
   new_order:         { label: "New Order",         color: "grey" },
@@ -71,6 +82,7 @@ export type OrderRow = {
   created_at: string
   customer: string
   currency_code: string
+  order_type: OrderTypeKey
   order_status: OrderStatusKey
   payment_status: PaymentStatusKey
   issue_status: IssueStatusKey
@@ -78,6 +90,7 @@ export type OrderRow = {
   delivery_charged: number
   total: number
   cogs: number
+  production_cost: number
   packaging: number
   courier_cost: number
   write_off: number
@@ -119,6 +132,7 @@ export const opApi = {
     return rbacFetch<{
       orders: OrderRow[]
       counts: Record<string, number>
+      type_counts: Record<OrderTypeKey, number>
       total: number
       totals: Record<string, number>
     }>(`/order-processing${qs ? `?${qs}` : ""}`)

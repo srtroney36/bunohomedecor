@@ -2,11 +2,14 @@ import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/
 import { MedusaError } from "@medusajs/framework/utils"
 
 import { computeOrderEconomics } from "../../../../lib/orders/order-economics"
-import { ALLOWED_TRANSITIONS } from "../../../../modules/orderProcessing/constants"
+import { allowedTransitions } from "../../../../modules/orderProcessing/constants"
 import { ORDER_PROCESSING_MODULE } from "../../../../modules/orderProcessing"
 import {
+  captureAdvanceWorkflow,
   setCourierFeeWorkflow,
+  setDeliveryChargedWorkflow,
   setOrderIssueWorkflow,
+  setProductionCostWorkflow,
   transitionOrderWorkflow,
 } from "../../../../workflows/orderProcessing"
 
@@ -27,8 +30,9 @@ export async function GET(req: AuthenticatedMedusaRequest, res: MedusaResponse) 
 
   res.json({
     order: econ,
-    // What this order may legally do next — so the UI offers only real options.
-    allowed_next: ALLOWED_TRANSITIONS[econ.order_status] ?? [],
+    // What this order may legally do next — type-aware, so a ready-stock order isn't offered
+    // "in production" and a pre-order is.
+    allowed_next: allowedTransitions(econ.order_type, econ.order_status),
     events,
     courier_rates: rates,
   })
@@ -46,6 +50,9 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     issue_status?: string
     courier_fee?: number
     courier_rate_id?: string | null
+    production_cost?: number
+    delivery_charged?: number | null
+    advance_amount?: number
     note?: string | null
   }
 
@@ -57,6 +64,29 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         courier_rate_id: body.courier_rate_id ?? null,
         actor_id: actorId,
       },
+    })
+  }
+
+  // Editable at any time — every edit re-flows through the P&L because it's all derived.
+  if (body.production_cost !== undefined) {
+    await setProductionCostWorkflow(req.scope).run({
+      input: { order_id: orderId, cost: Number(body.production_cost), actor_id: actorId },
+    })
+  }
+
+  if (body.delivery_charged !== undefined) {
+    await setDeliveryChargedWorkflow(req.scope).run({
+      input: {
+        order_id: orderId,
+        amount: body.delivery_charged == null ? null : Number(body.delivery_charged),
+      },
+    })
+  }
+
+  // A later advance/part-payment (e.g. customer sends a deposit after the order is placed).
+  if (body.advance_amount !== undefined && Number(body.advance_amount) > 0) {
+    await captureAdvanceWorkflow(req.scope).run({
+      input: { order_id: orderId, amount: Number(body.advance_amount) },
     })
   }
 
@@ -85,5 +115,8 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
   }
 
   const [econ] = await computeOrderEconomics(req.scope, { order_id: orderId })
-  res.json({ order: econ, allowed_next: ALLOWED_TRANSITIONS[econ!.order_status] ?? [] })
+  res.json({
+    order: econ,
+    allowed_next: econ ? allowedTransitions(econ.order_type, econ.order_status) : [],
+  })
 }
