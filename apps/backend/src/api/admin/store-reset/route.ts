@@ -37,6 +37,28 @@ async function collectIds(
   return ids
 }
 
+/**
+ * Release every stock reservation.
+ *
+ * Soft-deleting orders does NOT touch reservations — they live in the inventory module, linked
+ * to line items by a loose id with no cascade. So after a reset the reservation rows survive,
+ * and the `reserved_quantity` COUNTER on each level stays high: new stock then shows "2
+ * reserved" for orders that no longer exist. Deleting the reservations through the inventory
+ * module is the only thing that decrements that counter (it isn't settable directly).
+ */
+async function clearAllReservations(scope: any): Promise<number> {
+  const inventory = scope.resolve(Modules.INVENTORY) as any
+  let deleted = 0
+  for (;;) {
+    const items = await inventory.listReservationItems({}, { take: PAGE, select: ["id"] })
+    if (!items?.length) break
+    await inventory.deleteReservationItems(items.map((r: any) => r.id))
+    deleted += items.length
+    if (items.length < PAGE) break
+  }
+  return deleted
+}
+
 /** Force every stock level to a fixed quantity. */
 async function setAllStockLevels(scope: any, value: number): Promise<number> {
   const inventory = scope.resolve(Modules.INVENTORY) as any
@@ -139,11 +161,14 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
      */
     const value = 0
     try {
+      // Release reservations first — otherwise zeroed stock still reads "N reserved".
+      const reservationsCleared = await clearAllReservations(req.scope)
       const updated = await setAllStockLevels(req.scope, value)
       const purged = await purgeStockLayers(req.scope)
       summary.inventory = {
         levels_updated: updated,
         set_to: value,
+        reservations_cleared: reservationsCleared,
         batches_deleted: purged.batches,
         movements_deleted: purged.movements,
       }
@@ -215,11 +240,21 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
         errors.carts = e.message
       }
 
+      // Release the stock those orders were holding, or the reserved_quantity counter stays
+      // stuck and new stock reads as already reserved.
+      let reservationsCleared = 0
+      try {
+        reservationsCleared = await clearAllReservations(req.scope)
+      } catch (e: any) {
+        errors.reservations = e.message
+      }
+
       summary.orders = {
         orders: orderIds.length,
         returns: returnIds.length,
         exchanges: exchangeIds.length,
         carts: cartCount,
+        reservations_cleared: reservationsCleared,
       }
     } catch (e: any) {
       errors.orders = e.message
@@ -227,30 +262,71 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     }
   }
 
-  // ── Customers: soft-delete customers (+ optional auth/login identities) ──────
+  // ── Customers: soft-delete customers (+ optional login identities) ───────────
   if (wantCustomers) {
     try {
       const customerSvc = req.scope.resolve(Modules.CUSTOMER) as any
 
-      // Gather customer ids (need ids for auth-identity cleanup)
+      // Grab id AND email AND phone — the login credential is keyed on the email/phone (the
+      // "entity_id"), NOT on the customer id, so we need them to find it.
       const customerIds: string[] = []
+      const customerLogins = new Set<string>() // emails + phones, lower-cased
       let skip = 0
       for (;;) {
-        const rows = await customerSvc.listCustomers({}, { take: PAGE, skip, select: ["id"] })
+        const rows = await customerSvc.listCustomers(
+          {},
+          { take: PAGE, skip, select: ["id", "email", "phone"] }
+        )
         if (!rows?.length) break
-        customerIds.push(...rows.map((c: any) => c.id))
+        for (const r of rows) {
+          customerIds.push(r.id)
+          if (r.email) customerLogins.add(String(r.email).toLowerCase())
+          if (r.phone) customerLogins.add(String(r.phone).toLowerCase())
+        }
         if (rows.length < PAGE) break
         skip += rows.length
       }
 
       let identitiesDeleted = 0
+      let credentialsDeleted = 0
       if (wantIdentities && customerIds.length) {
         try {
           const auth = req.scope.resolve(Modules.AUTH) as any
           const customerIdSet = new Set(customerIds)
-          // Only delete auth identities that belong to a CUSTOMER we're removing.
-          // Admin/user identities carry app_metadata.user_id and are never touched.
-          const toDelete: string[] = []
+
+          /**
+           * THE FIX. A customer login is TWO records: a `provider_identity` (the email/password
+           * credential, keyed on the email) and the `auth_identity` it belongs to. Sign-up's
+           * "already exists" reads the CREDENTIAL's email — so deleting only the customer, or
+           * only auth identities matched by app_metadata.customer_id, leaves the email
+           * registered and the account un-recreatable. Some identities also have no app_metadata
+           * at all, so the old customer_id match missed them entirely.
+           *
+           * So: find every credential whose email/phone belongs to a customer we're deleting,
+           * and remove both halves. Admin logins (app_metadata.user_id) are never touched.
+           */
+          const provIds: string[] = []
+          const authIdsFromCreds = new Set<string>()
+          let pSkip = 0
+          for (;;) {
+            const provs = await auth.listProviderIdentities(
+              {},
+              { take: PAGE, skip: pSkip, select: ["id", "entity_id", "auth_identity_id"] }
+            )
+            if (!provs?.length) break
+            for (const p of provs) {
+              if (customerLogins.has(String(p.entity_id ?? "").toLowerCase())) {
+                provIds.push(p.id)
+                if (p.auth_identity_id) authIdsFromCreds.add(p.auth_identity_id)
+              }
+            }
+            if (provs.length < PAGE) break
+            pSkip += provs.length
+          }
+
+          // The auth identities to remove: those matched by credential, plus any still linked by
+          // app_metadata.customer_id — but NEVER an admin user's identity.
+          const authToDelete = new Set<string>()
           let aSkip = 0
           for (;;) {
             const idents = await auth.listAuthIdentities(
@@ -259,16 +335,24 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
             )
             if (!idents?.length) break
             for (const ai of idents) {
+              if (ai.app_metadata?.user_id) continue // an admin — leave it alone
               const cid = ai.app_metadata?.customer_id
-              if (cid && customerIdSet.has(cid)) toDelete.push(ai.id)
+              if (authIdsFromCreds.has(ai.id) || (cid && customerIdSet.has(cid))) {
+                authToDelete.add(ai.id)
+              }
             }
             if (idents.length < PAGE) break
             aSkip += idents.length
           }
-          if (toDelete.length) await auth.deleteAuthIdentities(toDelete)
-          identitiesDeleted = toDelete.length
+
+          // Delete the credential first (frees the email for re-registration), then the identity.
+          if (provIds.length) await auth.deleteProviderIdentities(provIds)
+          if (authToDelete.size) await auth.deleteAuthIdentities([...authToDelete])
+          credentialsDeleted = provIds.length
+          identitiesDeleted = authToDelete.size
         } catch (e: any) {
           errors.customer_identities = e.message
+          logger?.error(`[store-reset] customer identities failed: ${e.message}`)
         }
       }
 
@@ -277,6 +361,7 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
       summary.customers = {
         customers: customerIds.length,
         login_identities_deleted: identitiesDeleted,
+        credentials_deleted: credentialsDeleted,
       }
     } catch (e: any) {
       errors.customers = e.message
