@@ -146,6 +146,14 @@ export function DashboardSection() {
             emphasis
           />
         </div>
+
+        {data.partially_fulfilled_orders > 0 && (
+          <Text size="xsmall" className="text-ui-fg-muted mt-2">
+            <b>Margin is provisional.</b> {data.partially_fulfilled_orders} order(s) are only
+            part-shipped. Revenue counts them in full, but cost of goods only counts what actually
+            left the shelf — so profit and margin read high until the rest ships.
+          </Text>
+        )}
       </div>
 
       <Text size="xsmall" className="text-ui-fg-muted">

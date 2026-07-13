@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 
 import { money } from "../lib/kpi"
 import { stockApi } from "../lib/stock-api"
+import { StockHealthBanner } from "./stock-health-banner"
 import { VariantStockPanel } from "./variant-stock-panel"
 
 /**
@@ -61,6 +62,8 @@ const ProductCostWidget = ({ data: product }: { data: { id: string } }) => {
           pool on each shipment. Sales draw down the oldest batch first (FIFO).
         </Text>
       </div>
+
+      <StockHealthBanner />
 
       {isLoading ? (
         <Text size="small" className="text-ui-fg-muted">

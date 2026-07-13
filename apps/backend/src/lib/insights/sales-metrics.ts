@@ -46,6 +46,12 @@ export type SalesMetricsResult = {
   counted_orders: number
   total_orders_in_range: number
   variants_missing_cost: number
+  /**
+   * Part-shipped orders. Revenue counts them IN FULL but COGS only counts what actually left
+   * the shelf, so their margin reads high until the rest ships. Reported so the overstatement
+   * is visible rather than silent.
+   */
+  partially_fulfilled_orders: number
   metrics: SalesMetrics
 }
 
@@ -172,6 +178,7 @@ export async function computeSalesMetrics(
     counted_orders: counted.length,
     total_orders_in_range: orders.length,
     variants_missing_cost: variantsMissingCost,
+    partially_fulfilled_orders: fifo.partially_fulfilled_orders,
     metrics: {
       total_revenue: totalRevenue,
       product_revenue: productRevenue,

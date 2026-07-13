@@ -115,6 +115,82 @@ describe("replayFifo", () => {
     expect(r.units_in_stock).toBe(0)
   })
 
+  /**
+   * The drift bugs. Medusa moves stocked_quantity ONLY on fulfilment, cancelled fulfilment and
+   * RECEIVED returns. Consumption must mirror exactly that, or the shelf and the books diverge.
+   * Each case asserts the invariant: batch_remaining == what Medusa left on the shelf.
+   */
+  describe("stays in sync with what Medusa actually moves", () => {
+    const batch = (qty: number, cost: number): FifoBatchInput => ({
+      id: "b1",
+      variant_id: "v1",
+      received_date: d("2026-01-01"),
+      source: "restock",
+      landed_unit_cost: cost,
+      qty_received: qty,
+    })
+
+    it("PARTIAL FULFILMENT: consumes only the units that shipped, not the units ordered", () => {
+      // Ordered 5, fulfilled 3 → Medusa took 3 off the shelf, leaving 7 of 10.
+      const r = replayFifo(
+        [batch(10, 50)],
+        [{ variant_id: "v1", date: d("2026-02-01"), qty: 3, kind: "sale" }]
+      )
+      expect(r.cogs_in_range).toBe(3 * 50) // not 5 × 50
+      expect(r.units_in_stock).toBe(7) // matches the shelf → NO drift
+    })
+
+    it("RETURN REQUESTED but not received: nothing is credited back yet", () => {
+      // Fulfilled 4, return requested but not received → stock is still off the shelf.
+      const r = replayFifo(
+        [batch(10, 50)],
+        [{ variant_id: "v1", date: d("2026-02-01"), qty: 4, kind: "sale" }]
+      )
+      expect(r.units_in_stock).toBe(6) // the requested return must NOT put units back
+      expect(r.cogs_in_range).toBe(4 * 50)
+    })
+
+    it("RETURN RECEIVED: the units come back and COGS drops", () => {
+      // fulfilled 4 − return_received 3 = 1 consumed.
+      const r = replayFifo(
+        [batch(10, 50)],
+        [{ variant_id: "v1", date: d("2026-02-01"), qty: 4 - 3, kind: "sale" }]
+      )
+      expect(r.units_in_stock).toBe(9)
+      expect(r.cogs_in_range).toBe(1 * 50)
+    })
+
+    it("CANCELLED FULFILMENT: Medusa reverts fulfilled_quantity, so nothing is consumed", () => {
+      // fulfilled_quantity is back to 0 → no consumption event at all.
+      const r = replayFifo([batch(10, 50)], [])
+      expect(r.units_in_stock).toBe(10)
+      expect(r.cogs_in_range).toBe(0)
+    })
+
+    it("reports COGS in the ORDER's period while drawing the batch available at SHIPPING", () => {
+      // Ordered in Jan (revenue period), shipped in Feb. A batch that arrived in Feb — after the
+      // order but before the shipment — must still be drawable, or a backorder reads "uncosted".
+      const batches: FifoBatchInput[] = [
+        { id: "late", variant_id: "v1", received_date: d("2026-02-10"), source: "restock", landed_unit_cost: 70, qty_received: 5 },
+      ]
+      const r = replayFifo(
+        batches,
+        [
+          {
+            variant_id: "v1",
+            date: d("2026-02-20"), // shipped: batch exists by now
+            report_date: d("2026-01-15"), // ordered: where the revenue sits
+            qty: 2,
+            kind: "sale",
+          },
+        ],
+        { from: d("2026-01-01"), to: d("2026-01-31") } // January
+      )
+      expect(r.uncosted_units).toBe(0) // NOT uncosted: the batch was there when it shipped
+      expect(r.cogs_in_range).toBe(2 * 70) // and the cost lands in January, with the revenue
+    })
+  })
+
   it("isolates FIFO queues per variant", () => {
     const batches: FifoBatchInput[] = [
       { id: "a1", variant_id: "vA", received_date: d("2026-01-01"), source: "restock", landed_unit_cost: 10, qty_received: 5 },

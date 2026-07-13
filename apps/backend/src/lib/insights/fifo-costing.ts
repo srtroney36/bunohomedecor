@@ -29,9 +29,9 @@ import { PRODUCT_COST_MODULE } from "../../modules/productCost"
 export type CostingRange = { from: Date; to: Date }
 
 /**
- * Orders whose units have actually left the shelf. Mirrors the revenue filter in
- * sales-metrics (which imports these), so "what we booked revenue on" and "what drew down
- * stock" are the exact same set of orders.
+ * Orders that count toward REVENUE. Kept only for sales-metrics, which imports it.
+ *
+ * Deliberately NOT used for stock consumption any more — see below.
  */
 export const EXCLUDED_FULFILLMENT = new Set(["not_fulfilled", "canceled"])
 export function countsAsShipped(o: any): boolean {
@@ -65,6 +65,11 @@ export type FifoCosting = {
   /** Units sold/removed with no batch to draw from → inventory value is understated. */
   uncosted_units: number
   variants_uncosted: number
+  /**
+   * Orders that are part-shipped. Revenue counts them in full but COGS only counts what left,
+   * so their margin reads high until the rest ships. Surfaced, never silent.
+   */
+  partially_fulfilled_orders: number
 }
 
 /** Inputs to the pure replay. */
@@ -78,7 +83,17 @@ export type FifoBatchInput = {
 }
 export type FifoConsumption = {
   variant_id: string
+  /**
+   * When the units physically left the shelf. Drives FIFO ORDERING — which batches were
+   * available at that moment. For a sale this is the fulfilment date, so a batch received
+   * before shipping is always available to it (a backorder can't come out "uncosted").
+   */
   date: Date | string
+  /**
+   * Which period the cost is REPORTED in. Defaults to `date`. For a sale this is the order
+   * date, so COGS lands in the same period as the revenue it belongs to.
+   */
+  report_date?: Date | string
   qty: number | string
   kind: "sale" | "shrink"
 }
@@ -138,13 +153,16 @@ export function replayFifo(
   }
 
   for (const c of consumptions) {
+    // Two different dates on purpose: `t` decides WHICH batch is drawn (physical availability),
+    // `report_date` decides WHICH PERIOD the cost is reported in (matching the revenue).
     const t = new Date(c.date).getTime()
+    const reportT = new Date(c.report_date ?? c.date).getTime()
     evFor(c.variant_id).push({
       t,
       seq: 1,
       kind: c.kind,
       qty: num(c.qty),
-      dateInRange: inRange(t, range),
+      dateInRange: inRange(reportT, range),
     })
   }
 
@@ -214,6 +232,8 @@ export function replayFifo(
     found_value_in_range: foundValueInRange,
     uncosted_units: uncostedUnits,
     variants_uncosted: uncostedVariants.size,
+    // Set by computeFifoCosting, which is the only caller that sees orders.
+    partially_fulfilled_orders: 0,
   }
 }
 
@@ -241,41 +261,83 @@ export async function computeFifoCosting(
     kind: "shrink" as const,
   }))
 
-  // Sales OUT, net of returns, from Medusa's orders.
+  /**
+   * Sales OUT — driven by the numbers Medusa ACTUALLY moves stock by.
+   *
+   * `stocked_quantity` is adjusted in exactly three core workflows: create-fulfillment,
+   * cancel-order-fulfillment, and confirm-receive-return-request. All three are reflected in
+   * the order item's own counters:
+   *
+   *     units off the shelf = detail.fulfilled_quantity − detail.return_received_quantity
+   *
+   * Reading those instead of the ORDERED quantity is what makes drift impossible:
+   *   - partially fulfilled  → we consume the 3 shipped, not the 5 ordered
+   *   - return requested     → nothing credited back until it is actually RECEIVED
+   *   - fulfilment cancelled → Medusa reverts fulfilled_quantity, so we un-consume too
+   *   - claims / exchanges   → their items are order items, so they're counted for free
+   *
+   * No order-status filter: these counters ARE the physical truth, whatever the status says.
+   */
+  let partiallyFulfilledOrders = 0
   let offset = 0
   for (;;) {
     const { data } = await query.graph({
       entity: "order",
       fields: [
-        "id", "status", "fulfillment_status", "created_at",
-        "items.id", "items.quantity", "items.variant_id",
-        "returns.items.item_id", "returns.items.quantity",
+        "id", "created_at",
+        "items.id", "items.variant_id",
+        "items.detail.quantity",
+        "items.detail.fulfilled_quantity",
+        "items.detail.return_received_quantity",
+        "fulfillments.created_at", "fulfillments.canceled_at",
       ],
       pagination: { skip: offset, take: 200 },
     })
 
     for (const o of data as any[]) {
-      if (!countsAsShipped(o)) continue
+      // When the goods left: the first fulfilment that wasn't cancelled. Falls back to the
+      // order date (nothing shipped yet, so nothing is consumed anyway).
+      const shipDates = (o.fulfillments ?? [])
+        .filter((f: any) => !f.canceled_at)
+        .map((f: any) => new Date(f.created_at).getTime())
+        .filter((t: number) => Number.isFinite(t))
+      const shippedAt = shipDates.length ? new Date(Math.min(...shipDates)) : new Date(o.created_at)
 
-      const returnedByItem = new Map<string, number>()
-      for (const ret of o.returns ?? []) {
-        for (const ri of ret.items ?? []) {
-          returnedByItem.set(ri.item_id, (returnedByItem.get(ri.item_id) ?? 0) + num(ri.quantity))
-        }
-      }
+      let anyUnshipped = false
+      let anyShipped = false
 
       for (const it of o.items ?? []) {
         const vid = it.variant_id
         if (!vid) continue
-        const net = num(it.quantity) - (returnedByItem.get(it.id) ?? 0)
-        if (net <= 0) continue
-        consumptions.push({ variant_id: vid, date: o.created_at, qty: net, kind: "sale" })
+
+        const ordered = num(it.detail?.quantity)
+        const fulfilled = num(it.detail?.fulfilled_quantity)
+        const returned = num(it.detail?.return_received_quantity)
+        const consumed = fulfilled - returned
+
+        if (fulfilled > 0) anyShipped = true
+        if (fulfilled < ordered) anyUnshipped = true
+
+        if (consumed <= 0) continue
+        consumptions.push({
+          variant_id: vid,
+          date: shippedAt, // FIFO ordering: what was on the shelf when it left
+          report_date: o.created_at, // period: matches where the revenue is booked
+          qty: consumed,
+          kind: "sale",
+        })
       }
+
+      // Revenue counts a part-shipped order in full, so its margin is provisional. Counted here
+      // (we already have the data) so the dashboard can say so instead of quietly misleading.
+      if (anyShipped && anyUnshipped) partiallyFulfilledOrders++
     }
 
     if (data.length < 200) break
     offset += data.length
   }
 
-  return replayFifo(batches ?? [], consumptions, range)
+  const result = replayFifo(batches ?? [], consumptions, range)
+  result.partially_fulfilled_orders = partiallyFulfilledOrders
+  return result
 }

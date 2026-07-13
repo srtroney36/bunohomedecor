@@ -1,19 +1,19 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
 
+import { getCanonicalLocation } from "../inventory/stock-location"
 import { computeFifoCosting } from "./fifo-costing"
 
 /**
  * "Money rolling in inventory": the value of stock still on the shelf.
  *
- * Now valued by FIFO — Σ(units remaining in each batch × that batch's landed cost) — via the
- * one costing engine that also produces COGS, so inventory value and COGS can never disagree.
- * The old flat-per-variant average is gone.
+ * Valued by FIFO — Σ(units remaining in each batch × that batch's landed cost) — from the one
+ * costing engine that also produces COGS, so the two can never disagree.
  *
- * We still read Medusa's PHYSICAL stock, but only to RECONCILE: any physical units a batch
- * does not account for (e.g. stock typed straight into the native "Manage location quantity"
- * screen, which books no batch) mean inventory_at_cost is UNDERSTATED. That drift is exactly
- * what `units_missing_cost` / `variants_missing_cost` now surface.
+ * We still read Medusa's PHYSICAL stock, but only to RECONCILE — and ONLY at the canonical
+ * stock location. Summing every level across every location (as this used to) counted stock
+ * sitting in soft-deleted warehouses as real, which made the drift warning fire permanently on
+ * a store that was actually fine.
  */
 
 export type InventoryValuation = {
@@ -29,7 +29,6 @@ export async function computeInventoryAtCost(
 ): Promise<InventoryValuation> {
   const query = container.resolve(ContainerRegistrationKeys.QUERY)
 
-  // All-time FIFO state: value + units remaining, and per-batch remaining to fold per variant.
   const fifo = await computeFifoCosting(container)
   const remainingByVariant = new Map<string, number>()
   for (const b of fifo.per_batch) {
@@ -39,8 +38,18 @@ export async function computeInventoryAtCost(
     )
   }
 
-  // Physical stock per variant. Two variants can share ONE inventory item; dedupe by item so
-  // the same physical units aren't reconciled twice.
+  const base: InventoryValuation = {
+    inventory_at_cost: fifo.inventory_at_cost,
+    units_in_stock: fifo.units_in_stock,
+    units_missing_cost: 0,
+    variants_missing_cost: 0,
+  }
+
+  // No canonical location (broken setup) → we can't reconcile against anything. The health
+  // check reports that separately; don't invent a drift number here.
+  const { location } = await getCanonicalLocation(container)
+  if (!location) return base
+
   const seenItems = new Set<string>()
   const missing = new Set<string>()
   let unitsMissing = 0
@@ -53,6 +62,7 @@ export async function computeInventoryAtCost(
       fields: [
         "id",
         "inventory_items.inventory_item_id",
+        "inventory_items.inventory.location_levels.location_id",
         "inventory_items.inventory.location_levels.stocked_quantity",
       ],
       pagination: { skip, take: PAGE },
@@ -67,6 +77,8 @@ export async function computeInventoryAtCost(
         if (!itemId || seenItems.has(itemId)) continue
         seenItems.add(itemId)
         for (const lvl of link.inventory?.location_levels ?? []) {
+          // ONLY the canonical warehouse counts as real stock.
+          if (lvl.location_id !== location.id) continue
           physical += Number(lvl.stocked_quantity) || 0
         }
       }
@@ -83,8 +95,7 @@ export async function computeInventoryAtCost(
   }
 
   return {
-    inventory_at_cost: fifo.inventory_at_cost,
-    units_in_stock: fifo.units_in_stock,
+    ...base,
     units_missing_cost: unitsMissing,
     variants_missing_cost: missing.size,
   }

@@ -1,11 +1,12 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
-import {
-  ContainerRegistrationKeys,
-  MedusaError,
-  Modules,
-} from "@medusajs/framework/utils"
+import { Modules } from "@medusajs/framework/utils"
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 
+import {
+  ensureLevel,
+  loadVariantStockAt,
+  requireSellableLocation,
+} from "../../../lib/inventory/stock-location"
 import { ACCOUNTING_MODULE } from "../../../modules/accounting"
 import { PRODUCT_COST_MODULE } from "../../../modules/productCost"
 
@@ -23,67 +24,34 @@ export type ReceiveStockInput = { variant_id: string; quantity: number }
 export const receiveStockStep = createStep(
   "receive-stock",
   async (input: ReceiveStockInput, { container }: { container: MedusaContainer }) => {
-    const query = container.resolve(ContainerRegistrationKeys.QUERY)
     const inventory: any = container.resolve(Modules.INVENTORY)
 
-    const { data } = await query.graph({
-      entity: "product_variant",
-      fields: [
-        "id",
-        "title",
-        "sku",
-        "product.title",
-        "inventory_items.inventory_item_id",
-      ],
-      filters: { id: input.variant_id },
-    })
+    // The location must be resolvable AND sellable. Receiving into a warehouse no channel can
+    // reach would create stock that can never leave — the exact trap this store fell into.
+    const location = await requireSellableLocation(container)
+    const target = await loadVariantStockAt(container, input.variant_id, location)
+    await ensureLevel(container, target)
 
-    const v: any = data?.[0]
-    if (!v) {
-      throw new MedusaError(MedusaError.Types.NOT_FOUND, `Variant "${input.variant_id}" not found.`)
-    }
-    const itemId = v.inventory_items?.[0]?.inventory_item_id
-    if (!itemId) {
-      throw new MedusaError(
-        MedusaError.Types.INVALID_DATA,
-        `"${v.title ?? input.variant_id}" is not stock-managed, so there is nothing to restock. ` +
-          `Turn on "Manage inventory" for this variant first.`
-      )
-    }
-
-    const label = v.product?.title ? `${v.product.title} — ${v.title}` : v.title || v.sku || input.variant_id
-
-    let levels = await inventory.listInventoryLevels({ inventory_item_id: itemId }, { take: 1 })
-    let level = levels?.[0]
-    let locationId = level?.location_id
-
-    // No level yet: attach one at the first stock location and start from zero.
-    if (!locationId) {
-      const stockLocation: any = container.resolve(Modules.STOCK_LOCATION)
-      const locs = await stockLocation.listStockLocations({}, { take: 1 })
-      locationId = locs?.[0]?.id
-      if (!locationId) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          "No stock location is configured, so stock can't be received. Create one in Settings first."
-        )
-      }
-      await inventory.createInventoryLevels([
-        { inventory_item_id: itemId, location_id: locationId, stocked_quantity: 0 },
-      ])
-      level = { stocked_quantity: 0 }
-    }
-
-    const before = Number(level.stocked_quantity) || 0
+    const before = target.onShelf
     const after = before + input.quantity
 
     await inventory.updateInventoryLevels([
-      { inventory_item_id: itemId, location_id: locationId, stocked_quantity: after },
+      {
+        inventory_item_id: target.itemId,
+        location_id: target.locationId,
+        stocked_quantity: after,
+      },
     ])
 
     return new StepResponse(
-      { item_id: itemId, location_id: locationId, before, after, label },
-      { item_id: itemId, location_id: locationId, before }
+      {
+        item_id: target.itemId,
+        location_id: target.locationId,
+        before,
+        after,
+        label: target.label,
+      },
+      { item_id: target.itemId, location_id: target.locationId, before }
     )
   },
   async (comp, { container }) => {
@@ -154,6 +122,8 @@ export const bookRestockCashStep = createStep(
 export type CreateStockBatchInput = {
   variant_id: string
   inventory_item_id?: string | null
+  /** The warehouse this batch landed in — the level it will be reconciled against. */
+  location_id?: string | null
   received_date: Date
   qty_received: number
   unit_cost: number
@@ -181,6 +151,7 @@ export const createStockBatchStep = createStep(
       {
         variant_id: input.variant_id,
         inventory_item_id: input.inventory_item_id ?? null,
+        location_id: input.location_id ?? null,
         received_date: input.received_date,
         qty_received: input.qty_received,
         unit_cost: input.unit_cost,

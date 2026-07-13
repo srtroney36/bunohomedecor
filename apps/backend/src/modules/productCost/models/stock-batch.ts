@@ -28,6 +28,11 @@ const StockBatch = model
     // Resolved at receive time from the variant's inventory item. Lets us reconcile the
     // derived remaining against Medusa's physical stocked_quantity for this exact item.
     inventory_item_id: model.text().nullable(),
+    // The warehouse this batch physically landed in. Today there is one canonical location, so
+    // this is the same for every batch — but recording it is what makes multi-warehouse an
+    // additive change later instead of a rewrite, and it lets us prove a batch matches the
+    // level it is reconciled against.
+    location_id: model.text().nullable(),
 
     // The date the goods arrived — what FIFO orders by, and what every period report keys off.
     received_date: model.dateTime(),

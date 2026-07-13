@@ -297,9 +297,16 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
   const batches = stock?.batches ?? []
   const movements = stock?.movements ?? []
 
-  // What the shelf says vs what cost layers actually back. These must agree; if they don't,
-  // inventory value is understated and a Hard adjust is the way to reconcile.
+  /**
+   * On shelf vs reserved vs available. A reservation holds units for an unfulfilled order — it
+   * does NOT take them off the shelf, which is why placing an order used to look like an
+   * instant deduction when only "on shelf" was shown. Stock physically leaves at fulfilment.
+   *
+   * Drift is on-shelf vs batch-backed ONLY. Reserved is irrelevant to it.
+   */
   const currentQty = stock?.current_qty ?? 0
+  const reservedQty = stock?.reserved_qty ?? 0
+  const availableQty = stock?.available_qty ?? 0
   const batchBacked = batches.reduce((s, b) => s + b.remaining, 0)
   const drift = currentQty - batchBacked
 
@@ -313,6 +320,16 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
           <Badge size="2xsmall" color={currentQty > 0 ? "green" : "grey"}>
             {isLoading ? "…" : `${currentQty} on shelf`}
           </Badge>
+          {!isLoading && reservedQty > 0 && (
+            <Badge size="2xsmall" color="orange">
+              {reservedQty} reserved
+            </Badge>
+          )}
+          {!isLoading && (
+            <Badge size="2xsmall" color="blue">
+              {availableQty} available
+            </Badge>
+          )}
           {!isLoading && (
             <HardAdjust
               variantId={variantId}
@@ -325,6 +342,21 @@ export function VariantStockPanel({ variantId, cur = "bdt" }: { variantId: strin
           )}
         </div>
       </div>
+
+      {!isLoading && reservedQty > 0 && (
+        <Text size="xsmall" className="text-ui-fg-muted">
+          {reservedQty} unit(s) are held for orders that haven't shipped yet. They're still on the
+          shelf — stock only leaves when you fulfil.
+        </Text>
+      )}
+
+      {!isLoading && stock?.setup_problem && (
+        <div className="rounded-lg border border-ui-border-error bg-ui-bg-subtle p-2">
+          <Text size="xsmall" className="text-ui-fg-error">
+            <b>Setup problem.</b> {stock.setup_problem.message}
+          </Text>
+        </div>
+      )}
 
       {!isLoading && drift !== 0 && (
         <div className="rounded-lg border border-ui-border-error bg-ui-bg-subtle p-2">

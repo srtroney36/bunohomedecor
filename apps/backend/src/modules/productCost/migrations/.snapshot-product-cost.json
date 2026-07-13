@@ -54,6 +54,22 @@
           "enumItems": [],
           "mappedType": "text"
         },
+        "location_id": {
+          "name": "location_id",
+          "type": "text",
+          "unsigned": false,
+          "autoincrement": false,
+          "primary": false,
+          "nullable": true,
+          "unique": false,
+          "length": null,
+          "precision": null,
+          "scale": null,
+          "default": null,
+          "comment": null,
+          "enumItems": [],
+          "mappedType": "text"
+        },
         "received_date": {
           "name": "received_date",
           "type": "timestamptz",

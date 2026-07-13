@@ -102,6 +102,7 @@ export const restockWorkflow = createWorkflow(
         return {
           variant_id: input.variant_id,
           inventory_item_id: received.item_id,
+          location_id: received.location_id,
           received_date: input.purchase_date ?? new Date(),
           qty_received: qty,
           unit_cost: Number(input.unit_cost),
@@ -149,6 +150,7 @@ export const adjustStockWorkflow = createWorkflow(
       const batchInput = transform({ input, received }, ({ input, received }) => ({
         variant_id: input.variant_id,
         inventory_item_id: received.item_id,
+        location_id: received.location_id,
         received_date: input.date ?? new Date(),
         qty_received: Number(input.quantity),
         unit_cost: Number(input.unit_cost || 0),
@@ -224,6 +226,7 @@ export const reconcileStockWorkflow = createWorkflow(
       const batchInput = transform({ input, plan }, ({ input, plan }) => ({
         variant_id: input.variant_id,
         inventory_item_id: plan.item_id,
+        location_id: plan.location_id,
         received_date: input.date ?? new Date(),
         qty_received: plan.delta,
         unit_cost: Number(input.unit_cost),

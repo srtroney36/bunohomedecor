@@ -46,12 +46,35 @@ export type VariantMovement = {
   note: string | null
 }
 
+export type SetupProblem = { code: string; message: string; detail?: unknown }
+
 export type VariantStock = {
   current_qty: number
+  /** Held for unfulfilled orders. Does NOT reduce current_qty. */
+  reserved_qty: number
+  available_qty: number
+  location: { id: string; name: string } | null
+  setup_problem: SetupProblem | null
   latest_cost: number
   packaging_cost: number
   batches: Batch[]
   movements: VariantMovement[]
+}
+
+export type HealthIssue = {
+  code: string
+  message: string
+  /** Exactly where to correct it in Medusa's own settings. */
+  fix_where: string
+  fix_link?: string
+  /** True when it actively stops stock being reserved or shipped. */
+  blocking: boolean
+}
+
+export type StockHealth = {
+  healthy: boolean
+  location: { id: string; name: string } | null
+  issues: HealthIssue[]
 }
 
 export const stockApi = {
@@ -75,6 +98,10 @@ export const stockApi = {
     adminFetch(`/variant-stock/batches/${id}`, { method: "POST", body: JSON.stringify(body) }),
   deleteBatch: (id: string) =>
     adminFetch(`/variant-stock/batches/${id}`, { method: "DELETE" }),
+
+  // Diagnostics only. There is deliberately no "fix" endpoint — the store's configuration is
+  // yours to set, in Medusa's own settings.
+  health: () => adminFetch<StockHealth>(`/stock-health`),
 
   listCosts: (productId: string) =>
     adminFetch<{

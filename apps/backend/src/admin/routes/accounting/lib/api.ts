@@ -129,6 +129,8 @@ export type Dashboard = {
   currency_code: string
   variants_missing_cost: number
   units_missing_cost: number
+  /** Part-shipped orders: revenue counted in full, COGS only on what shipped → margin is high. */
+  partially_fulfilled_orders: number
   headline: { net_worth: number; working_capital: number; total_invested: number }
   assets: {
     inventory_at_cost: number

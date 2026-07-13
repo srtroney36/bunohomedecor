@@ -12,6 +12,7 @@ import {
   toast,
 } from "@medusajs/ui"
 
+import { StockHealthBanner } from "../../../widgets/stock-health-banner"
 import { BatchActions } from "./batch-actions"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
@@ -129,6 +130,9 @@ export function RestockSection() {
 
   return (
     <div className="flex flex-col gap-y-4">
+      {/* Restock is blocked while the setup is broken — this is how you unblock it. */}
+      <StockHealthBanner />
+
       <div>
         <Text weight="plus">Restock inventory</Text>
         <Text size="small" className="text-ui-fg-subtle">

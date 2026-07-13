@@ -1,13 +1,14 @@
 import type { MedusaContainer } from "@medusajs/framework/types"
-import {
-  ContainerRegistrationKeys,
-  MedusaError,
-  Modules,
-} from "@medusajs/framework/utils"
+import { MedusaError, Modules } from "@medusajs/framework/utils"
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 
 import { computeFifoCosting } from "../../../lib/insights/fifo-costing"
 import { planHardAdjust } from "../../../lib/insights/hard-adjust"
+import {
+  ensureLevel,
+  loadVariantStockAt,
+  requireSellableLocation,
+} from "../../../lib/inventory/stock-location"
 import { ACCOUNTING_MODULE } from "../../../modules/accounting"
 import { PRODUCT_COST_MODULE } from "../../../modules/productCost"
 
@@ -16,44 +17,34 @@ import { PRODUCT_COST_MODULE } from "../../../modules/productCost"
 type VariantInv = {
   itemId: string
   label: string
-  locationId: string | null
+  locationId: string
   before: number
+  reserved: number
   inventory: any
 }
 
-/** Resolve a variant's inventory item, its first stock level and current quantity. */
+/**
+ * A variant's stock AT THE CANONICAL LOCATION.
+ *
+ * This used to take `listInventoryLevels(item, { take: 1 })` — an arbitrary level, which in a
+ * store with more than one warehouse (including a soft-deleted one) meant writes landed
+ * somewhere the reads weren't looking. Everything now pins to the one canonical location.
+ */
 async function loadVariantInventory(
   container: MedusaContainer,
   variantId: string
 ): Promise<VariantInv> {
-  const query = container.resolve(ContainerRegistrationKeys.QUERY)
   const inventory: any = container.resolve(Modules.INVENTORY)
+  const location = await requireSellableLocation(container)
+  const target = await loadVariantStockAt(container, variantId, location)
+  await ensureLevel(container, target)
 
-  const { data } = await query.graph({
-    entity: "product_variant",
-    fields: ["id", "title", "sku", "product.title", "inventory_items.inventory_item_id"],
-    filters: { id: variantId },
-  })
-  const v: any = data?.[0]
-  if (!v) {
-    throw new MedusaError(MedusaError.Types.NOT_FOUND, `Variant "${variantId}" not found.`)
-  }
-  const itemId = v.inventory_items?.[0]?.inventory_item_id
-  if (!itemId) {
-    throw new MedusaError(
-      MedusaError.Types.INVALID_DATA,
-      `"${v.title ?? variantId}" is not stock-managed. Turn on "Manage inventory" first.`
-    )
-  }
-  const label = v.product?.title ? `${v.product.title} — ${v.title}` : v.title || v.sku || variantId
-
-  const levels = await inventory.listInventoryLevels({ inventory_item_id: itemId }, { take: 1 })
-  const level = levels?.[0]
   return {
-    itemId,
-    label,
-    locationId: level?.location_id ?? null,
-    before: Number(level?.stocked_quantity) || 0,
+    itemId: target.itemId,
+    label: target.label,
+    locationId: target.locationId,
+    before: target.onShelf,
+    reserved: target.reserved,
     inventory,
   }
 }
@@ -89,41 +80,17 @@ type AdjustComp = { item_id: string; location_id: string; before: number } | nul
 export const adjustStockLevelStep = createStep(
   "adjust-stock-level",
   async (input: AdjustStockLevelInput, { container }: { container: MedusaContainer }) => {
+    // loadVariantInventory pins us to the canonical location and guarantees the level exists.
     const inv = await loadVariantInventory(container, input.variant_id)
-    let locationId = inv.locationId
-
-    // Nothing on the shelf and we're removing: no level to touch.
-    if (!locationId && input.delta < 0) {
-      return new StepResponse<{ item_id: string; before: number; after: number; label: string }, AdjustComp>(
-        { item_id: inv.itemId, before: 0, after: 0, label: inv.label },
-        null
-      )
-    }
-
-    // No level yet but we're adding: attach one at the first stock location.
-    if (!locationId) {
-      const stockLocation: any = container.resolve(Modules.STOCK_LOCATION)
-      const locs = await stockLocation.listStockLocations({}, { take: 1 })
-      locationId = locs?.[0]?.id
-      if (!locationId) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          "No stock location is configured. Create one in Settings first."
-        )
-      }
-      await inv.inventory.createInventoryLevels([
-        { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: 0 },
-      ])
-    }
 
     const after = Math.max(0, inv.before + input.delta)
     await inv.inventory.updateInventoryLevels([
-      { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: after },
+      { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: after },
     ])
 
     return new StepResponse<{ item_id: string; before: number; after: number; label: string }, AdjustComp>(
       { item_id: inv.itemId, before: inv.before, after, label: inv.label },
-      { item_id: inv.itemId, location_id: locationId, before: inv.before }
+      { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
     )
   },
   async (comp: AdjustComp, { container }) => {
@@ -180,6 +147,7 @@ export const planHardAdjustStep = createStep(
       fifo_remaining: fifoRemaining,
       physical_qty: inv.before,
       item_id: inv.itemId,
+      location_id: inv.locationId,
       label: inv.label,
     })
   }
@@ -197,37 +165,14 @@ export const setStockLevelStep = createStep(
   async (input: SetStockLevelInput, { container }: { container: MedusaContainer }) => {
     const inv = await loadVariantInventory(container, input.variant_id)
     const target = Math.max(0, Number(input.target_qty))
-    let locationId = inv.locationId
-
-    // No level yet: nothing to zero out, but a positive target needs one.
-    if (!locationId) {
-      if (target === 0) {
-        return new StepResponse<{ before: number; after: number; item_id: string }, SetComp>(
-          { before: 0, after: 0, item_id: inv.itemId },
-          null
-        )
-      }
-      const stockLocation: any = container.resolve(Modules.STOCK_LOCATION)
-      const locs = await stockLocation.listStockLocations({}, { take: 1 })
-      locationId = locs?.[0]?.id
-      if (!locationId) {
-        throw new MedusaError(
-          MedusaError.Types.INVALID_DATA,
-          "No stock location is configured. Create one in Settings first."
-        )
-      }
-      await inv.inventory.createInventoryLevels([
-        { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: 0 },
-      ])
-    }
 
     await inv.inventory.updateInventoryLevels([
-      { inventory_item_id: inv.itemId, location_id: locationId, stocked_quantity: target },
+      { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: target },
     ])
 
     return new StepResponse<{ before: number; after: number; item_id: string }, SetComp>(
       { before: inv.before, after: target, item_id: inv.itemId },
-      { item_id: inv.itemId, location_id: locationId, before: inv.before }
+      { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
     )
   },
   async (comp: SetComp, { container }) => {
@@ -364,13 +309,11 @@ export const editBatchStep = createStep(
     const delta = newQty - oldQty
     if (delta !== 0) {
       const inv = await loadVariantInventory(container, batch.variant_id)
-      if (inv.locationId) {
-        const after = Math.max(0, inv.before + delta)
-        await inv.inventory.updateInventoryLevels([
-          { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: after },
-        ])
-        comp.stock = { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
-      }
+      const after = Math.max(0, inv.before + delta)
+      await inv.inventory.updateInventoryLevels([
+        { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: after },
+      ])
+      comp.stock = { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
     }
 
     // 3) The linked cash row (restock batches only).
@@ -487,13 +430,11 @@ export const deleteBatchStep = createStep(
     // Lower the stock this un-consumed batch put on the shelf.
     const qty = Number(batch.qty_received)
     const inv = await loadVariantInventory(container, batch.variant_id)
-    if (inv.locationId) {
-      const after = Math.max(0, inv.before - qty)
-      await inv.inventory.updateInventoryLevels([
-        { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: after },
-      ])
-      comp.stock = { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
-    }
+    const after = Math.max(0, inv.before - qty)
+    await inv.inventory.updateInventoryLevels([
+      { inventory_item_id: inv.itemId, location_id: inv.locationId, stocked_quantity: after },
+    ])
+    comp.stock = { item_id: inv.itemId, location_id: inv.locationId, before: inv.before }
 
     // Drop the linked cash row.
     if (batch.ledger_entry_id) {

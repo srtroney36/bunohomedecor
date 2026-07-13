@@ -25,6 +25,8 @@ const SEGMENT_ALIASES: Record<string, string> = {
   inventory: "inventory",
   "inventory-items": "inventory",
   reservations: "inventory",
+  // Stock setup health + its one-click repair: same grant as inventory.
+  "stock-health": "inventory",
   "price-lists": "price_lists",
   pricing: "price_lists",
   brands: "brands",

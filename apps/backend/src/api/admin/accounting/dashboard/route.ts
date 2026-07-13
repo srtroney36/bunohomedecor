@@ -106,6 +106,10 @@ export async function GET(
     variants_missing_cost: inventory.variants_missing_cost,
     units_missing_cost: inventory.units_missing_cost,
 
+    // Revenue counts a part-shipped order in full while COGS counts only what shipped, so the
+    // margin is provisional until the rest goes out. Say so rather than quietly overstate it.
+    partially_fulfilled_orders: periodSales.partially_fulfilled_orders,
+
     headline: {
       net_worth,
       working_capital,
