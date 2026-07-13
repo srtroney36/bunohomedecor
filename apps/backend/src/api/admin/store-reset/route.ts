@@ -115,9 +115,16 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
 
   // ── Inventory: force every stock level, and drop the cost layers behind it ───
   if (wantInventory) {
-    // A reset that keeps 1 unit still has to drop the batches, or those units would be
-    // "backed" by cost layers that no longer reflect reality.
-    const value = !wantAccounting && body.inventory?.value === 1 ? 1 : 0
+    /**
+     * ALWAYS zero. There used to be a "set everything to 1" option, and it manufactured the
+     * exact problem this system exists to prevent: a unit on the shelf that no cost batch backs.
+     * Uncosted stock understates COGS and inventory value, and the drift warning then fires
+     * forever with no way to reconcile.
+     *
+     * Stock enters through a restock, because that is what records what it cost. Reset to zero,
+     * then restock.
+     */
+    const value = 0
     try {
       const updated = await setAllStockLevels(req.scope, value)
       const purged = await purgeStockLayers(req.scope)

@@ -18,7 +18,6 @@ const NUKE_PHRASE = "reset everything"
 
 export function DangerZoneSection() {
   const [invEnabled, setInvEnabled] = useState(false)
-  const [invValue, setInvValue] = useState<"0" | "1">("0")
   const [ordersEnabled, setOrdersEnabled] = useState(false)
   const [custEnabled, setCustEnabled] = useState(false)
   const [custMode, setCustMode] = useState<"accounts" | "identities">("accounts")
@@ -45,7 +44,7 @@ export function DangerZoneSection() {
             confirm: phrase,
             everything,
             accounting: acctEnabled,
-            inventory: invEnabled ? { enabled: true, value: Number(invValue) } : undefined,
+            inventory: invEnabled ? { enabled: true } : undefined,
             orders: ordersEnabled,
             customers: custEnabled ? { enabled: true, identities: custMode === "identities" } : undefined,
           }),
@@ -88,26 +87,16 @@ export function DangerZoneSection() {
         </Text>
 
         {/* Inventory */}
-        <div className="flex flex-col gap-y-3 border-t border-ui-border-base pt-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Text size="small" weight="plus">Reset inventory quantity</Text>
-              <Text size="xsmall" className="text-ui-fg-muted">Set every stock level to a fixed value.</Text>
-            </div>
-            <Switch checked={invEnabled} onCheckedChange={setInvEnabled} disabled={busy} />
+        <div className="flex items-center justify-between border-t border-ui-border-base pt-4">
+          <div>
+            <Text size="small" weight="plus">Reset inventory to zero</Text>
+            <Text size="xsmall" className="text-ui-fg-muted">
+              Empties every stock level and clears the FIFO cost batches with it, so the shelf and
+              the books start life agreeing. Restock afterwards — that's what records what your
+              stock cost.
+            </Text>
           </div>
-          {invEnabled && (
-            <RadioGroup value={invValue} onValueChange={(v) => setInvValue(v as "0" | "1")} className="flex flex-row gap-x-6">
-              <div className="flex items-center gap-x-2">
-                <RadioGroup.Item value="0" id="inv-0" />
-                <Label htmlFor="inv-0" weight="plus">Set all to 0</Label>
-              </div>
-              <div className="flex items-center gap-x-2">
-                <RadioGroup.Item value="1" id="inv-1" />
-                <Label htmlFor="inv-1" weight="plus">Set all to 1</Label>
-              </div>
-            </RadioGroup>
-          )}
+          <Switch checked={invEnabled} onCheckedChange={setInvEnabled} disabled={busy} />
         </div>
 
         {/* Orders & sales */}
@@ -208,7 +197,7 @@ export function DangerZoneSection() {
                 <>
                   This permanently clears the selected data
                   {acctEnabled ? " · accounting + stock → 0" : ""}
-                  {invEnabled && !acctEnabled ? ` · inventory → ${invValue}` : ""}
+                  {invEnabled && !acctEnabled ? " · inventory → 0" : ""}
                   {ordersEnabled ? " · orders & sales" : ""}
                   {custEnabled ? ` · customers${custMode === "identities" ? " + logins" : ""}` : ""}
                   . This cannot be undone from the admin.

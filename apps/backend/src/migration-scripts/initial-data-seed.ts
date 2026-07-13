@@ -837,24 +837,39 @@ export default async function initial_data_seed({
   });
   logger.info("Finished seeding product data.");
 
-  logger.info("Seeding inventory levels.");
+  logger.info("Seeding inventory levels (at ZERO — see below).");
 
   const { data: inventoryItems } = await query.graph({
     entity: "inventory_item",
     fields: ["id"],
   });
 
+  /**
+   * ZERO. Deliberately.
+   *
+   * This used to seed 1,000,000 units per variant. That single line is what made stock and the
+   * books permanently irreconcilable: those units exist on the shelf but no FIFO cost batch
+   * backs them, so `inventory_at_cost` is understated, COGS is understated, and the drift
+   * warning fires forever. It cannot self-correct — a batch ledger can't retroactively invent
+   * what a million phantom vases cost.
+   *
+   * Stock must ENTER through a restock, because that is what records what it cost. Seed the
+   * levels (so each item is attached to the warehouse and ready to receive) and leave them at
+   * zero. First job on a fresh store: restock, which creates the batch and starts life in sync.
+   */
   await createInventoryLevelsWorkflow(container).run({
     input: {
       inventory_levels: inventoryItems.map((item) => ({
         location_id: stockLocation.id,
-        stocked_quantity: 1000000,
+        stocked_quantity: 0,
         inventory_item_id: item.id,
       })),
     },
   });
 
-  logger.info("Finished seeding inventory levels data.");
+  logger.info(
+    "Finished seeding inventory levels at 0 — restock products to bring in costed stock."
+  );
   } catch (e: any) {
     logger.error(
       `initial-data-seed did not complete (the store still boots — create region/products in the admin): ${e?.message ?? e}`

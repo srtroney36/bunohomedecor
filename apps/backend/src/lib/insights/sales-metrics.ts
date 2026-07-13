@@ -15,7 +15,8 @@ import { computeFifoCosting, EXCLUDED_FULFILLMENT } from "./fifo-costing"
  * "orders that drew down a batch" are guaranteed to be the identical set.
  */
 
-const PAID_STATUSES = new Set(["captured", "partially_captured"])
+// (No PAID_STATUSES set any more — cash comes from the captured payments themselves. A status
+// flag can't tell you HOW MUCH was captured, which is exactly what an advance payment needs.)
 
 export type SalesRange = { from: Date; to: Date }
 
@@ -122,6 +123,12 @@ export async function computeSalesMetrics(
       "id",
       "items.id", "items.quantity", "items.variant_id", "items.unit_price",
       "returns.id", "returns.items.item_id", "returns.items.quantity",
+      // Cash that ACTUALLY moved. See the codPaid note below for why the payment_status flag
+      // is not good enough.
+      "payment_collections.payments.amount",
+      "payment_collections.payments.captured_at",
+      "payment_collections.payments.canceled_at",
+      "payment_collections.payments.refunds.amount",
     ]),
   ])
 
@@ -130,6 +137,7 @@ export async function computeSalesMetrics(
     ...t,
     items: itemsById.get(t.id)?.items ?? [],
     returns: itemsById.get(t.id)?.returns ?? [],
+    payment_collections: itemsById.get(t.id)?.payment_collections ?? [],
   }))
 
   const counted = orders.filter(
@@ -180,8 +188,27 @@ export async function computeSalesMetrics(
     shippingCollected += Number(o.shipping_total) || 0
     totalRevenue += netTotal
 
-    if (PAID_STATUSES.has(o.payment_status)) codPaid += netTotal
-    else codPending += netTotal
+    /**
+     * CASH — from the money that actually moved, not from a status flag.
+     *
+     * This used to read `payment_status`, and treat "partially_captured" as fully paid: a ৳500
+     * advance on a ৳2,500 order booked the whole ৳2,500 as cash in hand. With advance payments
+     * that overstated cash — and therefore net worth — by ৳2,000 an order.
+     *
+     * A Medusa payment is captured in full or not at all, so a captured payment's amount IS the
+     * cash. Whatever is left of the total is still owed (the COD the courier hasn't handed over).
+     */
+    let captured = 0
+    let refunded = 0
+    for (const pc of o.payment_collections ?? []) {
+      for (const p of pc.payments ?? []) {
+        if (p.captured_at && !p.canceled_at) captured += Number(p.amount) || 0
+        for (const r of p.refunds ?? []) refunded += Number(r.amount) || 0
+      }
+    }
+
+    codPaid += Math.max(0, captured - refunded)
+    codPending += Math.max(0, netTotal - captured)
   }
 
   const cogs = Math.max(0, fifo.cogs_in_range)

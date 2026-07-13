@@ -95,10 +95,23 @@ export async function GET(
   const inventory_adjustments =
     periodSales.metrics.inventory_writeoff - periodSales.metrics.inventory_found
   const gross = periodSales.metrics.gross_profit
-  const operating_expenses = periodExpenses.total + packaging_used_period + inventory_adjustments
+
+  /**
+   * DELIVERY IS BOTH SIDES OF A TRADE, and this used to only count one of them.
+   *
+   * The courier fee sat in operating expenses, but what the customer PAID for delivery was left
+   * out of revenue entirely — so every parcel looked like a pure cost and net profit was
+   * understated by the whole delivery charge. Charge ৳100, pay the courier ৳60, and the books
+   * were showing −৳60 instead of +৳40.
+   */
+  const delivery_charged = periodSales.metrics.shipping_collected
+  const courier_cost = periodExpenses.courier_fee
+  const delivery_margin = delivery_charged - courier_cost
+
   // Money in that isn't a sale — courier compensation for a destroyed parcel, scrap. Real income.
   const other_income = pnlIncome(periodRows)
-  const net_profit = gross + other_income - operating_expenses
+  const operating_expenses = periodExpenses.total + packaging_used_period + inventory_adjustments
+  const net_profit = gross + delivery_charged + other_income - operating_expenses
 
   res.json({
     currency_code: lifetimeSales.currency_code ?? "bdt",
@@ -161,6 +174,10 @@ export async function GET(
       packaging_used: packaging_used_period,
       inventory_adjustments,
       other_income,
+      // Delivery, both sides — so you can see whether carrying parcels makes or loses money.
+      delivery_charged,
+      courier_cost,
+      delivery_margin,
       operating_expenses,
       net_profit,
       net_margin_pct:
