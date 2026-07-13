@@ -1,11 +1,20 @@
+import { createOrderWorkflow } from "@medusajs/core-flows"
 import { AuthenticatedMedusaRequest, MedusaResponse } from "@medusajs/framework/http"
 import { Modules } from "@medusajs/framework/utils"
-import { createOrderWorkflow } from "@medusajs/core-flows"
 
-// POST /admin/quick-orders — create an order on behalf of a customer (social/phone/in-store).
-// Works with phone + address only: a synthetic, non-deliverable email is generated when none
-// is given, so Medusa's email requirement is satisfied invisibly. Uses the same workflow the
-// native Draft Order route uses, so inventory/totals are handled natively.
+import { checkAvailability, reserveOrderItems } from "../../../lib/orders/reserve"
+
+/**
+ * POST /admin/quick-orders — create an order on behalf of a customer (social/phone/in-store).
+ *
+ * IMPORTANT: `createOrderWorkflow` does NOT reserve inventory — only the storefront's
+ * `completeCartWorkflow` does. Relying on it alone meant manual orders were never allocated,
+ * and because nothing had checked the stock was there, fulfilling one drove the quantity
+ * straight through zero and negative.
+ *
+ * So this route now does what cart completion does: refuse the order if the stock isn't there,
+ * and reserve it the moment the order exists.
+ */
 
 type LineInput = {
   variant_id: string
@@ -92,6 +101,26 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     unit_price: Math.max(0, Number(it.unit_price) || 0),
   }))
 
+  /**
+   * Refuse an order we can't fill — BEFORE it exists.
+   *
+   * This is the check that was missing. Without it, an order for 50 units of something we hold 1
+   * of was accepted happily, and only revealed itself when fulfilment pushed the stock to −49.
+   */
+  const shortages = await checkAvailability(
+    req.scope,
+    items.map((i) => ({ variant_id: i.variant_id, quantity: i.quantity, title: i.title }))
+  )
+  if (shortages.length) {
+    return res.status(400).json({
+      error: "Not enough stock to take this order.",
+      shortages,
+      message: shortages
+        .map((s) => `${s.title}: asked for ${s.requested}, only ${s.available} available`)
+        .join("; "),
+    })
+  }
+
   const shipping_methods = b.shipping
     ? [
         {
@@ -119,5 +148,28 @@ export async function POST(req: AuthenticatedMedusaRequest, res: MedusaResponse)
     } as any,
   })
 
-  res.json({ order_id: (order as any)?.id, order })
+  const orderId = (order as any)?.id
+
+  /**
+   * Reserve the stock. `createOrderWorkflow` doesn't, so without this the order shows no
+   * allocation and nothing protects the quantity from going negative at fulfilment.
+   */
+  let reservation: { reserved: number; skipped: number } | null = null
+  try {
+    reservation = await reserveOrderItems(req.scope, orderId)
+  } catch (e: any) {
+    // The order is real and the customer is waiting — don't lose it over a reservation. Say so
+    // loudly instead: an unallocated order is exactly what caused the negative stock.
+    const logger: any = req.scope.resolve("logger")
+    logger?.error(`[quick-orders] ${orderId} created but NOT reserved: ${e.message}`)
+    return res.json({
+      order_id: orderId,
+      order,
+      warning:
+        `The order was created, but its stock could NOT be reserved (${e.message}). ` +
+        `Allocate it manually before fulfilling, or fulfilment may drive the stock negative.`,
+    })
+  }
+
+  res.json({ order_id: orderId, order, reservation })
 }

@@ -8,7 +8,9 @@ import type { MedusaContainer } from "@medusajs/framework/types"
 import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { createStep, StepResponse } from "@medusajs/framework/workflows-sdk"
 
+import { requireSellableLocation } from "../../../lib/inventory/stock-location"
 import { computeOrderEconomics } from "../../../lib/orders/order-economics"
+import { reserveOrderItems } from "../../../lib/orders/reserve"
 import { canTransition, issueWritesOffGoods } from "../../../lib/orders/status"
 import { returnAndRestockOrder } from "../../../lib/returns"
 import {
@@ -103,8 +105,21 @@ export const transitionOrderStep = createStep(
         )
       }
 
+      /**
+       * Make sure the stock is actually reserved before it ships.
+       *
+       * An order created in the admin never got a reservation (createOrderWorkflow doesn't make
+       * one), so nothing had verified the goods existed. Fulfilling it then drove the quantity
+       * straight through zero. Reserving here both allocates it and forces that check.
+       */
+      await reserveOrderItems(container, input.order_id)
+
+      // Ship from the ONE warehouse we stock. Without this, Medusa may deduct from a different
+      // location than the restock credited — which is how stock read −49 while the batches said 1.
+      const location = await requireSellableLocation(container)
+
       await createOrderFulfillmentWorkflow(container).run({
-        input: { order_id: input.order_id, items },
+        input: { order_id: input.order_id, items, location_id: location.id } as any,
       })
     }
 

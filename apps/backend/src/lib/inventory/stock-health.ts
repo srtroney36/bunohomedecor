@@ -17,7 +17,14 @@ import { getCanonicalLocation } from "./stock-location"
  */
 
 export type HealthIssue = {
-  code: "channel_not_linked" | "no_location" | "ambiguous_locations" | "phantom_stock" | "uncosted_stock"
+  code:
+    | "channel_not_linked"
+    | "no_location"
+    | "ambiguous_locations"
+    | "phantom_stock"
+    | "uncosted_stock"
+    | "negative_stock"
+    | "unreserved_orders"
   /** What is broken, in plain terms. */
   message: string
   /** Exactly where to go to fix it. */
@@ -108,7 +115,77 @@ export async function inspectStockHealth(container: MedusaContainer): Promise<St
     })
   }
 
-  /* 3) Units sold with no cost layer → COGS and inventory value understated. */
+  /**
+   * 3) NEGATIVE STOCK — impossible in the real world, so it always means something shipped that
+   *    was never reserved and never checked. This is the alarm that should have gone off before
+   *    a quantity ever reached −49.
+   */
+  const negatives = (levels ?? []).filter((l: any) => Number(l.stocked_quantity) < 0)
+  if (negatives.length) {
+    const worst = Math.min(...negatives.map((l: any) => Number(l.stocked_quantity)))
+    issues.push({
+      code: "negative_stock",
+      message:
+        `${negatives.length} item(s) have NEGATIVE stock (as low as ${worst}). That's not ` +
+        `possible physically — it means goods shipped that were never reserved, so nothing ` +
+        `checked they existed. Inventory value and COGS are wrong until it's corrected.`,
+      fix_where:
+        "Count the shelf and use Hard adjust on those variants to set the true quantity. " +
+        "New orders can no longer do this — manual orders now reserve stock like storefront ones.",
+      blocking: true,
+    })
+  }
+
+  /**
+   * 4) Orders holding stock they never reserved. An order created in the admin before this was
+   *    fixed has no reservation, so its goods aren't held for it — and fulfilling it is what
+   *    drives the quantity negative.
+   */
+  const { data: openOrders } = await query.graph({
+    entity: "order",
+    fields: [
+      "id",
+      "display_id",
+      "canceled_at",
+      "items.id",
+      "items.detail.quantity",
+      "items.detail.fulfilled_quantity",
+    ],
+  })
+
+  const unreserved: number[] = []
+  for (const o of (openOrders ?? []) as any[]) {
+    if (o.canceled_at) continue
+    const outstanding = (o.items ?? []).reduce(
+      (s: number, it: any) =>
+        s +
+        (Number(it.detail?.quantity ?? 0) - Number(it.detail?.fulfilled_quantity ?? 0)),
+      0
+    )
+    if (outstanding <= 0) continue
+
+    const lineIds = (o.items ?? []).map((it: any) => it.id)
+    if (!lineIds.length) continue
+    const held = await inventory.listReservationItems({ line_item_id: lineIds })
+    if (!(held ?? []).length) unreserved.push(o.display_id)
+  }
+
+  if (unreserved.length) {
+    issues.push({
+      code: "unreserved_orders",
+      message:
+        `${unreserved.length} unshipped order(s) hold NO stock reservation (#${unreserved
+          .slice(0, 5)
+          .join(", #")}${unreserved.length > 5 ? "…" : ""}). Their goods aren't allocated, and ` +
+        `fulfilling them can push stock below zero.`,
+      fix_where:
+        "Open each order and allocate it, or re-create it. Orders created from now on reserve " +
+        "stock automatically.",
+      blocking: false,
+    })
+  }
+
+  /* 5) Units sold with no cost layer → COGS and inventory value understated. */
   const fifo = await computeFifoCosting(container)
   if (fifo.uncosted_units > 0) {
     issues.push({
