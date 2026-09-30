@@ -115,6 +115,7 @@ const Shipping: React.FC<ShippingProps> = ({
 
   const handleSubmit = () => {
     router.push(pathname + "?step=payment", { scroll: false })
+    router.refresh()
   }
 
   const handleSetShippingMethod = async (
@@ -137,6 +138,9 @@ const Shipping: React.FC<ShippingProps> = ({
     })
 
     await setShippingMethod({ cartId: cart.id, shippingMethodId: id })
+      .then(() => {
+        router.refresh()
+      })
       .catch((err) => {
         setShippingMethodId(currentId)
 
@@ -376,7 +380,7 @@ const Shipping: React.FC<ShippingProps> = ({
               className="mt"
               onClick={handleSubmit}
               isLoading={isLoading}
-              disabled={!cart.shipping_methods?.[0]}
+              disabled={isLoading || (!shippingMethodId && !cart.shipping_methods?.[0])}
               data-testid="submit-delivery-option-button"
             >
               Continue to payment

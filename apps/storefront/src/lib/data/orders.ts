@@ -19,11 +19,14 @@ export const retrieveOrder = async (id: string) => {
       method: "GET",
       query: {
         fields:
-          "*payment_collections.payments,*items,*items.metadata,*items.variant,*items.product",
+          "*shipping_address,*billing_address,*items,*items.metadata,*items.variant,*items.product,*shipping_methods,+shipping_methods.name,*payment_collections,*payment_collections.payments",
       },
       headers,
-      next,
-      cache: "force-cache",
+      next: {
+        ...next,
+        revalidate: 0,
+      },
+      cache: "no-store",
     })
     .then(({ order }) => order)
     .catch((err) => medusaError(err))

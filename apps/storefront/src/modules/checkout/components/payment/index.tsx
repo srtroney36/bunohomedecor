@@ -57,6 +57,11 @@ const Payment = ({
         provider_id: method,
         data: { cart_id: cart.id, country_code: pathname.split("/")[1] ?? "bd" },
       } as any)
+    } else {
+      // Manual / COD: initiate payment session
+      await initiatePaymentSession(cart, {
+        provider_id: method,
+      }).catch(() => {})
     }
   }
 
@@ -92,7 +97,7 @@ const Payment = ({
       const checkActiveSession =
         activeSession?.provider_id === selectedPaymentMethod
 
-      if (!checkActiveSession) {
+      if (!checkActiveSession && selectedPaymentMethod) {
         await initiatePaymentSession(cart, {
           provider_id: selectedPaymentMethod,
           ...(isRedirectProvider(selectedPaymentMethod)
@@ -117,12 +122,14 @@ const Payment = ({
       }
 
       if (!shouldInputCard) {
-        return router.push(
+        router.push(
           pathname + "?" + createQueryString("step", "review"),
           {
             scroll: false,
           }
         )
+        router.refresh()
+        return
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

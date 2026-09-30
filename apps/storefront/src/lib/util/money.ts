@@ -9,18 +9,24 @@ type ConvertToLocaleParams = {
 }
 
 export const convertToLocale = ({
-  amount,
+  amount = 0,
   currency_code,
   minimumFractionDigits,
   maximumFractionDigits,
   locale = "en-US",
 }: ConvertToLocaleParams) => {
-  return currency_code && !isEmpty(currency_code)
-    ? new Intl.NumberFormat(locale, {
+  const num = typeof amount === "number" && !isNaN(amount) ? amount : 0
+  if (currency_code && !isEmpty(currency_code)) {
+    try {
+      return new Intl.NumberFormat(locale, {
         style: "currency",
         currency: currency_code,
         minimumFractionDigits,
         maximumFractionDigits,
-      }).format(amount)
-    : amount.toString()
+      }).format(num)
+    } catch {
+      return `${currency_code.toUpperCase()} ${num}`
+    }
+  }
+  return num.toString()
 }

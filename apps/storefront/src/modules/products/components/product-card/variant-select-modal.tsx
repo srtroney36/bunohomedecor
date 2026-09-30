@@ -33,15 +33,46 @@ export default function VariantSelectModal({
   // Find the variant that matches all selected option values
   const resolvedVariant = product.variants?.find((v) =>
     v.options?.every(
-      (o) => selectedOptions[o.option_id ?? ""] === o.value
+      (o) => selectedOptions[o.option_id ?? (o as any).option?.id ?? ""] === o.value
     )
   )
 
+  const inStock = resolvedVariant
+    ? resolvedVariant.manage_inventory === false ||
+      resolvedVariant.allow_backorder ||
+      (resolvedVariant.inventory_quantity || 0) > 0 ||
+      resolvedVariant.manage_inventory == null
+    : false
+
   const allSelected = options.every((opt) => selectedOptions[opt.id ?? ""] !== undefined)
-  const canSubmit = allSelected && !!resolvedVariant
+  const canSubmit = allSelected && !!resolvedVariant && inStock
 
   const handleSelect = (optionId: string, value: string) => {
-    setSelectedOptions((prev) => ({ ...prev, [optionId]: value }))
+    setSelectedOptions((prev) => {
+      const next = { ...prev, [optionId]: value }
+      const match = product.variants?.find((v) =>
+        v.options?.every(
+          (o) => next[o.option_id ?? (o as any).option?.id ?? ""] === o.value
+        )
+      )
+      if (match) return next
+      const candidate = product.variants?.find((v) =>
+        v.options?.some(
+          (o) =>
+            (o.option_id === optionId || (o as any).option?.id === optionId) &&
+            o.value === value
+        )
+      )
+      if (candidate) {
+        const candidateMap: Record<string, string> = {}
+        for (const opt of candidate.options ?? []) {
+          const id = opt.option_id || (opt as any).option?.id
+          if (id && opt.value) candidateMap[id] = opt.value
+        }
+        if (Object.keys(candidateMap).length > 0) return candidateMap
+      }
+      return next
+    })
   }
 
   const handleSubmit = async () => {
@@ -136,6 +167,8 @@ export default function VariantSelectModal({
             <span className="animate-pulse">
               {mode === "buy" ? "Processing…" : "Adding…"}
             </span>
+          ) : resolvedVariant && !inStock ? (
+            "Out of stock"
           ) : mode === "buy" ? (
             "Buy Now"
           ) : (

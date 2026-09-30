@@ -24,7 +24,7 @@ import { getLocale } from "./locale-actions"
 export async function retrieveCart(cartId?: string, fields?: string) {
   const id = cartId || (await getCartId())
   fields ??=
-    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, +shipping_methods.name"
+    "*items, *region, *items.product, *items.variant, *items.thumbnail, *items.metadata, +items.total, *promotions, *shipping_address, *billing_address, *shipping_methods, +shipping_methods.name, *payment_collection, *payment_collection.payment_sessions"
 
   if (!id) {
     return null
@@ -335,14 +335,18 @@ export async function submitPromotionForm(
 
 // TODO: Pass a POJO instead of a form entity here
 export async function setAddresses(currentState: unknown, formData: FormData) {
+  let countryCode = "bd"
   try {
     if (!formData) {
       throw new Error("No form data found when setting addresses")
     }
-    const cartId = getCartId()
+    const cartId = await getCartId()
     if (!cartId) {
       throw new Error("No existing cart found when setting addresses")
     }
+
+    countryCode =
+      (formData.get("shipping_address.country_code") as string)?.toLowerCase() || "bd"
 
     const data = {
       shipping_address: {
@@ -353,7 +357,7 @@ export async function setAddresses(currentState: unknown, formData: FormData) {
         company: formData.get("shipping_address.company"),
         postal_code: formData.get("shipping_address.postal_code"),
         city: formData.get("shipping_address.city"),
-        country_code: formData.get("shipping_address.country_code"),
+        country_code: countryCode,
         province: formData.get("shipping_address.province"),
         phone: formData.get("shipping_address.phone"),
       },
@@ -372,7 +376,7 @@ export async function setAddresses(currentState: unknown, formData: FormData) {
         company: formData.get("billing_address.company"),
         postal_code: formData.get("billing_address.postal_code"),
         city: formData.get("billing_address.city"),
-        country_code: formData.get("billing_address.country_code"),
+        country_code: countryCode,
         province: formData.get("billing_address.province"),
         phone: formData.get("billing_address.phone"),
       }
@@ -381,9 +385,7 @@ export async function setAddresses(currentState: unknown, formData: FormData) {
     return e.message
   }
 
-  redirect(
-    `/${formData.get("shipping_address.country_code")}/checkout?step=delivery`
-  )
+  redirect(`/${countryCode}/checkout?step=delivery`)
 }
 
 /**
@@ -413,16 +415,23 @@ export async function placeOrder(cartId?: string) {
 
   if (cartRes?.type === "order") {
     const countryCode =
-      cartRes.order.shipping_address?.country_code?.toLowerCase()
+      cartRes.order.shipping_address?.country_code?.toLowerCase() || "bd"
 
     const orderCacheTag = await getCacheTag("orders")
     revalidateTag(orderCacheTag)
 
-    removeCartId()
+    await removeCartId()
     redirect(`/${countryCode}/order/${cartRes?.order.id}/confirmed`)
   }
 
-  return cartRes.cart
+  if (cartRes?.type === "cart") {
+    const errorMsg =
+      (cartRes as any)?.error?.message ||
+      "Could not place order with current cart. Please check your shipping and payment selection."
+    throw new Error(errorMsg)
+  }
+
+  throw new Error("Failed to place order. Please try again.")
 }
 
 /**

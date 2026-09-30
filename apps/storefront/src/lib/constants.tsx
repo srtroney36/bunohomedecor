@@ -54,7 +54,12 @@ export const isPaypal = (providerId?: string) => {
   return providerId?.startsWith("pp_paypal")
 }
 export const isManual = (providerId?: string) => {
-  return providerId?.startsWith("pp_system_default")
+  return (
+    providerId?.startsWith("pp_system_default") ||
+    providerId?.startsWith("pp_system") ||
+    providerId === "manual" ||
+    (providerId != null && providerId.includes("system"))
+  )
 }
 
 // Redirect-based providers (no in-page card input; customer is sent to an external gateway)

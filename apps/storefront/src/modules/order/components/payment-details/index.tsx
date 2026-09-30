@@ -18,41 +18,46 @@ const PaymentDetails = ({ order }: PaymentDetailsProps) => {
         Payment
       </Heading>
       <div>
-        {payment && (
-          <div className="flex items-start gap-x-1 w-full">
-            <div className="flex flex-col w-1/3">
-              <Text className="txt-medium-plus text-ui-fg-base mb-1">
-                Payment method
+        <div className="flex items-start gap-x-1 w-full">
+          <div className="flex flex-col w-1/3">
+            <Text className="txt-medium-plus text-ui-fg-base mb-1">
+              Payment method
+            </Text>
+            <Text
+              className="txt-medium text-ui-fg-subtle"
+              data-testid="payment-method"
+            >
+              {payment?.provider_id
+                ? (paymentInfoMap[payment.provider_id]?.title ?? "Cash on Delivery (COD)")
+                : "Cash on Delivery (COD)"}
+            </Text>
+          </div>
+          <div className="flex flex-col w-2/3">
+            <Text className="txt-medium-plus text-ui-fg-base mb-1">
+              Payment details
+            </Text>
+            <div className="flex gap-2 txt-medium text-ui-fg-subtle items-center">
+              <Container className="flex items-center h-7 w-fit p-2 bg-ui-button-neutral-hover">
+                {payment?.provider_id
+                  ? (paymentInfoMap[payment.provider_id]?.icon ?? paymentInfoMap["pp_system_default"]?.icon)
+                  : paymentInfoMap["pp_system_default"]?.icon}
+              </Container>
+              <Text data-testid="payment-amount">
+                {payment && isStripeLike(payment.provider_id) && payment.data?.card_last4
+                  ? `**** **** **** ${payment.data.card_last4}`
+                  : payment?.created_at && (payment.captured_at || (order.payment_status && order.payment_status !== "not_paid"))
+                  ? `${convertToLocale({
+                      amount: payment.amount ?? order.total ?? 0,
+                      currency_code: order.currency_code,
+                    })} paid at ${new Date(payment.created_at).toLocaleDateString()}`
+                  : `Pay on Delivery: ${convertToLocale({
+                      amount: order.total ?? 0,
+                      currency_code: order.currency_code,
+                    })}`}
               </Text>
-              <Text
-                className="txt-medium text-ui-fg-subtle"
-                data-testid="payment-method"
-              >
-                {paymentInfoMap[payment.provider_id]?.title ?? "Cash on Delivery (COD)"}
-              </Text>
-            </div>
-            <div className="flex flex-col w-2/3">
-              <Text className="txt-medium-plus text-ui-fg-base mb-1">
-                Payment details
-              </Text>
-              <div className="flex gap-2 txt-medium text-ui-fg-subtle items-center">
-                <Container className="flex items-center h-7 w-fit p-2 bg-ui-button-neutral-hover">
-                  {paymentInfoMap[payment.provider_id]?.icon}
-                </Container>
-                <Text data-testid="payment-amount">
-                  {isStripeLike(payment.provider_id) && payment.data?.card_last4
-                    ? `**** **** **** ${payment.data.card_last4}`
-                    : `${convertToLocale({
-                        amount: payment.amount,
-                        currency_code: order.currency_code,
-                      })} paid at ${new Date(
-                        payment.created_at ?? ""
-                      ).toLocaleString()}`}
-                </Text>
-              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <Divider className="mt-8" />

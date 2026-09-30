@@ -7,7 +7,8 @@ type OrderDetailsProps = {
 }
 
 const OrderDetails = ({ order, showStatus }: OrderDetailsProps) => {
-  const formatStatus = (str: string) => {
+  const formatStatus = (str?: string | null) => {
+    if (!str) return "N/A"
     const formatted = str.split("_").join(" ")
 
     return formatted.slice(0, 1).toUpperCase() + formatted.slice(1)

@@ -24,7 +24,10 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
     !cart.email ||
     (cart.shipping_methods?.length ?? 0) < 1
 
-  const paymentSession = cart.payment_collection?.payment_sessions?.[0]
+  const paymentSession =
+    cart.payment_collection?.payment_sessions?.find(
+      (s) => s.status === "pending"
+    ) ?? cart.payment_collection?.payment_sessions?.[0]
 
   switch (true) {
     case isStripeLike(paymentSession?.provider_id):
@@ -36,16 +39,16 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         />
       )
     case isManual(paymentSession?.provider_id):
-      return (
-        <ManualTestPaymentButton notReady={notReady} cart={cart} data-testid={dataTestId} />
-      )
     case isRedirectProvider(paymentSession?.provider_id):
-      // Redirect already happened in the payment step; this is the return path — just place the order
-      return (
-        <ManualTestPaymentButton notReady={notReady} cart={cart} data-testid={dataTestId} />
-      )
+    case !paymentSession?.provider_id:
     default:
-      return <Button disabled>Select a payment method</Button>
+      return (
+        <ManualTestPaymentButton
+          notReady={notReady}
+          cart={cart}
+          data-testid={dataTestId}
+        />
+      )
   }
 }
 
@@ -183,14 +186,15 @@ const ManualTestPaymentButton = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const onPaymentCompleted = async () => {
+    setErrorMessage(null)
     if (cart?.id) captureMetaSignals(cart.id)
-    await placeOrder()
-      .catch((err) => {
-        setErrorMessage(err.message)
-      })
-      .finally(() => {
-        setSubmitting(false)
-      })
+    try {
+      await placeOrder()
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to place order. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handlePayment = () => {

@@ -16,10 +16,16 @@ const Review = ({ cart }: { cart: HttpTypes.StoreCart }) => {
     (cart as unknown as Record<string, unknown>)?.gift_cards && ((cart as unknown as Record<string, unknown>)?.gift_cards as unknown[])?.length > 0 && cart?.total === 0
   )
 
+  const hasPayment =
+    Boolean(cart.payment_collection) ||
+    Boolean(cart.payment_collection?.payment_sessions?.length) ||
+    paidByGiftcard ||
+    Boolean(cart.total === 0)
+
   const previousStepsCompleted =
-    cart.shipping_address &&
+    Boolean(cart.shipping_address) &&
     (cart.shipping_methods?.length ?? 0) > 0 &&
-    (cart.payment_collection || paidByGiftcard)
+    hasPayment
 
   return (
     <div className="bg-white">
@@ -50,6 +56,11 @@ const Review = ({ cart }: { cart: HttpTypes.StoreCart }) => {
           </div>
           <PaymentButton cart={cart} data-testid="submit-order-button" />
         </>
+      )}
+      {isOpen && !previousStepsCompleted && (
+        <div className="p-4 bg-ui-bg-subtle rounded-rounded text-ui-fg-subtle text-small-regular">
+          Please complete your delivery address, shipping method, and payment selection above to review and place your order.
+        </div>
       )}
     </div>
   )

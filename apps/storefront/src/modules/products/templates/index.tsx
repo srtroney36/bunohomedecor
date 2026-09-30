@@ -13,8 +13,6 @@ import { HttpTypes } from "@medusajs/types"
 import { getStoreSettings } from "@lib/data/store-settings"
 import { StoreBrand } from "@lib/data/brands"
 
-import ProductActionsWrapper from "./product-actions-wrapper"
-
 type ProductTemplateProps = {
   product: HttpTypes.StoreProduct
   region: HttpTypes.StoreRegion
@@ -70,22 +68,11 @@ const ProductTemplate = async ({
           />
 
           {/* Price + action buttons first */}
-          <Suspense
-            fallback={
-              <ProductActions
-                disabled={true}
-                product={product}
-                region={region}
-                storeSettings={storeSettings}
-              />
-            }
-          >
-            <ProductActionsWrapper
-              id={product.id}
-              region={region}
-              storeSettings={storeSettings}
-            />
-          </Suspense>
+          <ProductActions
+            product={product}
+            region={region}
+            storeSettings={storeSettings}
+          />
 
           {/* Description sits just before Product Information */}
           {product.description && (

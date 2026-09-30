@@ -26,7 +26,8 @@ const optionsAsKeymap = (
   variantOptions: HttpTypes.StoreProductVariant["options"]
 ) => {
   return variantOptions?.reduce((acc: Record<string, string>, varopt) => {
-    if (varopt.option_id) acc[varopt.option_id] = varopt.value
+    const optId = varopt.option_id || (varopt as any).option?.id
+    if (optId && varopt.value) acc[optId] = varopt.value
     return acc
   }, {})
 }
@@ -40,21 +41,82 @@ export default function ProductActions({
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const [options, setOptions] = useState<Record<string, string | undefined>>({})
+  const optionsToRender = useMemo(() => {
+    if (product.options && product.options.length > 0) {
+      return product.options
+    }
+    if ((product.variants?.length ?? 0) > 1) {
+      const optionMap = new Map<string, { id: string; title: string; values: any[] }>()
+      for (const variant of product.variants ?? []) {
+        for (const opt of variant.options ?? []) {
+          const id = opt.option_id || (opt as any).option?.id || "default"
+          if (!optionMap.has(id)) {
+            optionMap.set(id, {
+              id,
+              title: (opt as any).option?.title || "Option",
+              values: [],
+            })
+          }
+          const entry = optionMap.get(id)!
+          if (
+            opt.value &&
+            !entry.values.some(
+              (v: any) => (typeof v === "string" ? v : v.value) === opt.value
+            )
+          ) {
+            entry.values.push({ id: opt.id, value: opt.value, option_id: id })
+          }
+        }
+      }
+      return Array.from(optionMap.values()) as HttpTypes.StoreProductOption[]
+    }
+    return []
+  }, [product.options, product.variants])
+
+  // Find initial variant: from searchParams v_id if valid, or default to first variant
+  const initialVariant = useMemo(() => {
+    if (!product.variants || product.variants.length === 0) return undefined
+    const vId = searchParams.get("v_id")
+    if (vId) {
+      const found = product.variants.find((v) => v.id === vId)
+      if (found) return found
+    }
+    return product.variants[0]
+  }, [product.variants, searchParams])
+
+  const [options, setOptions] = useState<Record<string, string | undefined>>(() => {
+    return initialVariant ? (optionsAsKeymap(initialVariant.options) ?? {}) : {}
+  })
   const [isAdding, setIsAdding] = useState(false)
   const [isBuyingNow, setIsBuyingNow] = useState(false)
   const [quantity, setQuantity] = useState(1)
-  const countryCode = useParams().countryCode as string
+  const countryCode = (useParams().countryCode as string) || "bd"
 
+  // Sync options if URL searchParams changes or variants load
   useEffect(() => {
-    if (product.variants?.length === 1) {
-      const variantOptions = optionsAsKeymap(product.variants[0].options)
-      setOptions(variantOptions ?? {})
+    const vId = searchParams.get("v_id")
+    if (vId && product.variants?.length) {
+      const target = product.variants.find((v) => v.id === vId)
+      if (target) {
+        const variantOptions = optionsAsKeymap(target.options)
+        if (variantOptions) {
+          setOptions(variantOptions)
+          return
+        }
+      }
     }
-  }, [product.variants])
+    // If no options selected yet and variants are present, pre-select first variant
+    if (product.variants?.length && Object.keys(options).length === 0) {
+      const first = product.variants[0]
+      const variantOptions = optionsAsKeymap(first.options)
+      if (variantOptions) {
+        setOptions(variantOptions)
+      }
+    }
+  }, [searchParams, product.variants])
 
   const selectedVariant = useMemo(() => {
-    if (!product.variants || product.variants.length === 0) return
+    if (!product.variants || product.variants.length === 0) return undefined
     return product.variants.find((v) => {
       const variantOptions = optionsAsKeymap(v.options)
       return isEqual(variantOptions, options)
@@ -62,32 +124,60 @@ export default function ProductActions({
   }, [product.variants, options])
 
   const setOptionValue = (optionId: string, value: string) => {
-    setOptions((prev) => ({ ...prev, [optionId]: value }))
+    setOptions((prev) => {
+      const next = { ...prev, [optionId]: value }
+
+      // 1. Direct match with existing options
+      const exactMatch = product.variants?.find((v) => {
+        const variantOptions = optionsAsKeymap(v.options)
+        return isEqual(variantOptions, next)
+      })
+      if (exactMatch) {
+        return next
+      }
+
+      // 2. Intelligent fallback: find a variant having this option value and pick its options
+      const candidate = product.variants?.find((v) => {
+        return v.options?.some(
+          (o) =>
+            (o.option_id === optionId || (o as any).option?.id === optionId) &&
+            o.value === value
+        )
+      })
+      if (candidate) {
+        const candidateOpts = optionsAsKeymap(candidate.options)
+        if (candidateOpts && Object.keys(candidateOpts).length > 0) {
+          return candidateOpts
+        }
+      }
+
+      return next
+    })
   }
 
-  const isValidVariant = useMemo(() => {
-    return product.variants?.some((v) => {
-      const variantOptions = optionsAsKeymap(v.options)
-      return isEqual(variantOptions, options)
-    })
-  }, [product.variants, options])
+  const isValidVariant = !!selectedVariant
 
+  // Update URL search param smoothly without unmounting/flickering
   useEffect(() => {
+    if (!selectedVariant?.id) return
     const params = new URLSearchParams(searchParams.toString())
-    const value = isValidVariant ? selectedVariant?.id : null
-    if (params.get("v_id") === value) return
-    if (value) {
-      params.set("v_id", value)
-    } else {
-      params.delete("v_id")
+    if (params.get("v_id") === selectedVariant.id) return
+
+    params.set("v_id", selectedVariant.id)
+    const newUrl = `${pathname}?${params.toString()}`
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", newUrl)
     }
-    router.replace(pathname + "?" + params.toString())
-  }, [selectedVariant, isValidVariant])
+  }, [selectedVariant?.id, pathname, searchParams])
 
   const inStock = useMemo(() => {
-    if (selectedVariant && !selectedVariant.manage_inventory) return true
-    if (selectedVariant?.allow_backorder) return true
-    if (selectedVariant?.manage_inventory && (selectedVariant?.inventory_quantity || 0) > 0) return true
+    if (!selectedVariant) return false
+    if (selectedVariant.manage_inventory === false) return true
+    if (selectedVariant.allow_backorder) return true
+    if (selectedVariant.manage_inventory && (selectedVariant.inventory_quantity || 0) > 0) return true
+    // If manage_inventory is not strictly true or quantity is not tracked, treat as in stock
+    if (selectedVariant.manage_inventory === undefined || selectedVariant.manage_inventory === null) return true
     return false
   }, [selectedVariant])
 
@@ -118,10 +208,10 @@ export default function ProductActions({
     setIsBuyingNow(false)
   }
 
-  const isActionDisabled = !inStock || !selectedVariant || !!disabled || !isValidVariant
-  const addToCartLabel = !selectedVariant && !options
+  const isActionDisabled = !inStock || !selectedVariant || !!disabled || !isValidVariant || isAdding || isBuyingNow
+  const addToCartLabel = !selectedVariant
     ? "Select variant"
-    : !inStock || !isValidVariant
+    : !inStock
     ? "Out of stock"
     : "Add to Cart"
 
@@ -130,7 +220,7 @@ export default function ProductActions({
 
   const whatsappUrl = whatsappNumber
     ? `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Hi, I'd like to order: ${product.title}`
+        `Hi, I'd like to order: ${product.title}${selectedVariant?.title ? ` - ${selectedVariant.title}` : ""}`
       )}`
     : null
 
@@ -138,9 +228,9 @@ export default function ProductActions({
     <>
       <div className="flex flex-col gap-y-4" ref={actionsRef}>
         {/* Variant options */}
-        {(product.variants?.length ?? 0) > 1 && (
+        {(product.variants?.length ?? 0) > 1 && optionsToRender.length > 0 && (
           <div className="flex flex-col gap-y-4">
-            {(product.options || []).map((option) => (
+            {optionsToRender.map((option) => (
               <div key={option.id}>
                 <OptionSelect
                   option={option}
@@ -149,6 +239,7 @@ export default function ProductActions({
                   title={option.title ?? ""}
                   data-testid="product-options"
                   disabled={!!disabled || isAdding || isBuyingNow}
+                  productVariants={product.variants}
                 />
               </div>
             ))}
@@ -251,7 +342,7 @@ export default function ProductActions({
         </div>
 
         <MobileActions
-          product={product}
+          product={{ ...product, options: optionsToRender }}
           variant={selectedVariant}
           options={options}
           updateOptions={setOptionValue}
